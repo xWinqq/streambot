@@ -9,12 +9,17 @@ import os
 # 1. Pagina Configuratie
 st.set_page_config(page_title="OERbot - Dulon College", page_icon="📚", layout="centered")
 
-# 2. Geavanceerde CSS (Outline Buttons, Dunner & Fix voor Icons)
+# 2. Geavanceerde CSS (Light Mode, Outline Buttons & Verbergen Sidebar Toggle)
 def apply_custom_css():
     st.markdown(f"""
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;700&display=swap');
         
+        /* VERBERG SIDEBAR TOGGLE (Pijltje op mobiel) */
+        [data-testid="collapsedControl"] {{
+            display: none;
+        }}
+
         /* FORCEER LIGHT MODE */
         [data-testid="stAppViewContainer"], .main, [data-testid="stHeader"] {{
             background-color: white !important;
@@ -23,7 +28,7 @@ def apply_custom_css():
         [data-testid="stSidebar"] {{
             background-color: #f0f2f6 !important;
         }}
-        p, h1, h2, h3, h4, span, label {{
+        p, h1, h2, h3, h4, span, label, .stMarkdown {{
             color: #1f1f1f !important;
             font-family: 'Nunito', sans-serif !important;
         }}
@@ -58,7 +63,7 @@ def apply_custom_css():
 
 apply_custom_css()
 
-# 3. Gegevens ophalen
+# 3. Gegevens ophalen uit st.secrets
 api_key = st.secrets.get("openai_api_key")
 admin_user = st.secrets.get("admin_username")
 admin_pass = st.secrets.get("admin_password")
@@ -83,7 +88,7 @@ def initialize_vector_store(pdf_path):
     except:
         return None
 
-# 5. Session States
+# 5. Session States initialiseren
 if 'messages' not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben OERbot 😊. Jouw hulpje voor alle vragen over het examenreglement. Waar kan ik je vandaag mee helpen?"}]
 if 'logged_in' not in st.session_state:
@@ -91,7 +96,7 @@ if 'logged_in' not in st.session_state:
 if 'vector_store' not in st.session_state:
     st.session_state.vector_store = None
 
-# 6. Logo Branding
+# 6. Logo Branding bovenaan
 col1, col2, col3 = st.columns([1,3,1])
 with col2:
     if os.path.exists("logo.png"):
@@ -115,12 +120,13 @@ def handle_query(query):
             response = "Ik kan je hier helaas alleen helpen met informatie uit de OER. Deze vraag staat niet in de OER, dus kan ik je hier niets over zeggen. 😊"
         else:
             context_text = "\n\n".join([d.page_content for d in docs])
+            
             system_prompt = f"""
             Jij bent OERbot, een vriendelijke MBO-klasgenoot op het Dulon College.
-            DOEL: Studenten helpen met vragen over examinering uit de OER.
-            STIJL: B1-niveau, warm, empathisch, emoji's. Gebruik 'je'/'jij'.
+            Help studenten met vragen over examinering uit de OER.
+            Stijl: B1-niveau, warm, empathisch, gebruik emoji's 😊.
             
-            ANTWOORD STRUCTUUR:
+            Structuur:
             1. Bevestig gevoel.
             2. Samenvatting regel uit OER met bron (artikel X).
             3. Call to Action.
@@ -135,7 +141,7 @@ def handle_query(query):
                 full_response += chunk.content
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-# 8. Quick Actions (Dunne Outline Buttons)
+# 8. Quick Actions (Outline Buttons)
 st.markdown("#### Waar wil je meer over weten?")
 q_col1, q_col2 = st.columns(2, gap="small")
 with q_col1:
@@ -161,12 +167,13 @@ with q_col2:
 
 st.divider()
 
-# 9. Chat Geschiedenis (Fix voor Icons)
+# 9. Chat Geschiedenis (Met aangepaste icons voor beide partijen)
 bot_icon = "custom_bot_image.png" if os.path.exists("custom_bot_image.png") else "🤖"
+user_icon = "user_logo.png" if os.path.exists("user_logo.png") else None
 
 for message in st.session_state.messages:
-    # Als de rol 'user' is, gebruiken we None voor het standaard icoon, anders het bot-icoon
-    current_avatar = bot_icon if message["role"] == "assistant" else None
+    current_avatar = bot_icon if message["role"] == "assistant" else user_icon
+        
     with st.chat_message(message["role"], avatar=current_avatar):
         st.markdown(message["content"])
 
@@ -175,13 +182,13 @@ if chat_input := st.chat_input("Stel je eigen vraag aan OERbot..."):
     handle_query(chat_input)
     st.rerun()
 
-# 11. Beheerder Sidebar
+# 11. Beheerder Sidebar (Admin login via de verborgen zijbalk)
 with st.sidebar:
     if not st.session_state.logged_in:
         st.title("Admin")
-        u = st.text_input("User")
-        p = st.text_input("Pass", type="password")
-        if st.button("Login"):
+        u = st.text_input("Gebruikersnaam")
+        p = st.text_input("Wachtwoord", type="password")
+        if st.button("Inloggen"):
             if u == admin_user and p == admin_pass:
                 st.session_state.logged_in = True
                 st.rerun()
@@ -201,7 +208,7 @@ with st.sidebar:
             st.session_state.logged_in = False
             st.rerun()
 
-# PDF Auto-load
+# PDF Auto-load logic
 if st.session_state.vector_store is None and os.path.exists("uploads/pdf_name.txt"):
     with open("uploads/pdf_name.txt", "r") as f:
         name = f.read().strip()
