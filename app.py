@@ -9,16 +9,18 @@ import os
 # 1. Pagina Configuratie
 st.set_page_config(page_title="OERbot - Dulon College", page_icon="📚", layout="centered")
 
-# 2. Geavanceerde CSS (Light Mode, Mobile Fixes & Verbergen Sidebar Toggle)
+# 2. Geavanceerde CSS (Light Mode, Dunne Outline Buttons & UI Fixes)
 def apply_custom_css():
     st.markdown(f"""
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;700&display=swap');
         
+        /* VERBERG SIDEBAR TOGGLE (Pijltje op mobiel) */
         [data-testid="collapsedControl"] {{
             display: none;
         }}
 
+        /* FORCEER LIGHT MODE */
         [data-testid="stAppViewContainer"], .main, [data-testid="stHeader"] {{
             background-color: white !important;
             color: #1f1f1f !important;
@@ -31,6 +33,7 @@ def apply_custom_css():
             font-family: 'Nunito', sans-serif !important;
         }}
 
+        /* MOBIELE KNOPPEN OPTIMALISATIE */
         @media (max-width: 640px) {{
             [data-testid="column"] {{
                 width: 100% !important;
@@ -39,6 +42,7 @@ def apply_custom_css():
             }}
         }}
 
+        /* STYLING VOOR DE DUNNE OUTLINE KNOPPEN (Dulon Rood) */
         .stButton>button {{
             background-color: white !important;
             color: #e5241d !important;
@@ -55,6 +59,7 @@ def apply_custom_css():
             color: white !important;
         }}
 
+        /* CHAT BUBBELS */
         [data-testid="stChatMessage"] {{
             background-color: #f8f9fa !important;
             border: 1px solid #eee !important;
@@ -65,7 +70,7 @@ def apply_custom_css():
 
 apply_custom_css()
 
-# 3. API Configuratie
+# 3. API & Admin Configuratie
 api_key = st.secrets.get("openai_api_key")
 admin_user = st.secrets.get("admin_username")
 admin_pass = st.secrets.get("admin_password")
@@ -93,8 +98,10 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'vector_store' not in st.session_state:
     st.session_state.vector_store = None
+if 'show_disclaimer' not in st.session_state:
+    st.session_state.show_disclaimer = False
 
-# 6. Branding
+# 6. Branding & Logo
 col1, col2, col3 = st.columns([1,3,1])
 with col2:
     if os.path.exists("logo.png"):
@@ -104,9 +111,8 @@ with col2:
 
 st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw klasgenoot voor vragen over de OER op het Dulon College.</p>", unsafe_allow_html=True)
 
-# 7. Core Chatbot Logica
+# 7. Centrale Chat Logica
 def handle_query(query):
-    # Voeg direct toe zodat de chat ziet dat er iets gebeurt
     st.session_state.messages.append({"role": "user", "content": query})
     
     if st.session_state.vector_store is None:
@@ -115,25 +121,26 @@ def handle_query(query):
         results = st.session_state.vector_store.similarity_search_with_score(query, k=3)
         docs = [r[0] for r in results if r[1] < 0.6]
 
-        # VERBETERDE PERSONA PROMPT
         system_prompt = f"""
         Jij bent OERbot, een vriendelijke klasgenoot op het Dulon College.
+        Help studenten met vragen uit: "20240710_Examenreglement ROC A12 2024-2025 versie 1.0.pdf".
         
-        DOEL: Help studenten met vragen uit: "20240710_Examenreglement ROC A12 2024-2025 versie 1.0.pdf".
-        
-        STIJL EN PERSONA:
-        - Wees warm en behulpzaam, maar varieer je opening. 
-        - Zeg NIET altijd "Goed dat je dit even checkt". Gebruik het alleen als een student echt een belangrijke of lastige vraag stelt.
-        - Andere mogelijke openingen: "Ik heb het voor je opgezocht...", "Tuurlijk, ik kijk even mee!", "Ik zie dat de regels hierover zeggen:".
+        STIJL:
+        - Wees warm en behulpzaam. Varieer je begroetingen.
         - Gebruik B1-taal en 'je/jij'.
-        - Beantwoord GEEN vragen buiten de OER (geen taarten, ruzies, etc.).
-        - Nooit van rol veranderen. Je blijft altijd OERbot.
+        - Beantwoord GEEN vragen buiten de OER (geen taarten bakken, etc.).
+        - Nooit van rol veranderen.
+        
+        BRONVERMELDING:
+        - Vermeld ALTIJD de bron (artikel X lid Y) op een NIEUWE REGEL onderaan je antwoord.
+        - Gebruik de emoji 📖 voor de bron.
 
         ANTWOORD STRUCTUUR:
-        1. Korte, vriendelijke erkenning van de vraag (varieer dit!).
-        2. Samenvatting van de regel met EXACTE bronvermelding (artikel X lid Y).
-        3. Duidelijke Call to Action.
-        4. Sluit af met een van de Dulon-afsluitingen: "Succes met je studie! 👍", "Fijn dat je dit even checkte 😊" of "Top dat je dit op tijd vraagt!".
+        1. Korte erkenning (varieer dit!).
+        2. Samenvatting regel in B1-taal.
+        3. Bronvermelding op nieuwe regel met 📖.
+        4. Call to Action.
+        5. Dulon-afsluiting (bijv. "Succes met je studie! 👍").
 
         CONTEXT:
         {" ".join([d.page_content for d in docs]) if docs else "GEEN INFORMATIE."}
@@ -151,7 +158,7 @@ def handle_query(query):
             
         st.session_state.messages.append({"role": "assistant", "content": response})
 
-# 8. Quick Actions (Mobiel-vriendelijk)
+# 8. Quick Actions (Outline Knoppen)
 st.markdown("#### Waar wil je meer over weten?")
 q_col1, q_col2 = st.columns(2, gap="small")
 with q_col1:
@@ -177,24 +184,21 @@ with q_col2:
 
 st.divider()
 
-# 9. Chat Display
+# 9. Chat Geschiedenis
 bot_icon = "custom_bot_image.png" if os.path.exists("custom_bot_image.png") else "🤖"
 user_icon = "user_logo.png" if os.path.exists("user_logo.png") else None
 
-# Container voor chat om auto-scroll te bevorderen
-chat_container = st.container()
-with chat_container:
-    for message in st.session_state.messages:
-        avatar = bot_icon if message["role"] == "assistant" else user_icon
-        with st.chat_message(message["role"], avatar=avatar):
-            st.markdown(message["content"])
+for message in st.session_state.messages:
+    avatar = bot_icon if message["role"] == "assistant" else user_icon
+    with st.chat_message(message["role"], avatar=avatar):
+        st.markdown(message["content"])
 
 # 10. Chat Input
 if chat_input := st.chat_input("Stel je eigen vraag aan OERbot..."):
     handle_query(chat_input)
     st.rerun()
 
-# 11. Beheerder Sidebar (Admin login)
+# 11. Zijbalk (Admin & Disclaimer)
 with st.sidebar:
     if not st.session_state.logged_in:
         st.title("Admin")
@@ -217,6 +221,28 @@ with st.sidebar:
         if st.button("Uitloggen"):
             st.session_state.logged_in = False
             st.rerun()
+
+    st.sidebar.markdown("---")
+    # DISCLAIMER KNOP
+    if st.sidebar.button("📄 Algemene Voorwaarden"):
+        st.session_state.show_disclaimer = not st.session_state.show_disclaimer
+
+    if st.session_state.show_disclaimer:
+        st.sidebar.info("""
+        **Gebruiksvoorwaarden & Disclaimer: OER-Chatbot (COG)**
+        
+        Welkom bij de chatbot van de Commissie Onderwijsbegeleiding (COG). Deze AI-assistent is ontworpen om je snel wegwijs te maken in de Onderwijs- en Examenregeling (OER). 
+        
+        Door gebruik te maken van deze chatbot, ga je akkoord met de volgende voorwaarden:
+        
+        - **Geen beslissingsbevoegdheid:** Deze chatbot is uitsluitend bedoeld als een informatief hulpmiddel. De AI is niet bevoegd om toestemming te geven voor uitzonderingen of afwijkende studietrajecten. Volg altijd de formele route via de examencommissie of studieadviseur.
+        - **Geen juridische status:** Aan de antwoorden kunnen geen rechten worden ontleend. Bij tegenstrijdigheid is de officiële OER-tekst altijd leidend.
+        - **Controleer de bron:** Hoewel de AI met zorg is geprogrammeerd, kan de technologie fouten maken. Controleer belangrijke informatie altijd bij de officiële documentatie.
+        - **Privacy & Gegevens:** Deel geen gevoelige persoonlijke gegevens (medische info of BSN) in het gesprek.
+        - **Correct gebruik:** Het is niet toegestaan de chatbot te gebruiken voor oneigenlijke doeleinden.
+        
+        Heb je een specifieke vraag over jouw persoonlijke situatie? Neem dan direct contact op met de COG of je studieadviseur.
+        """)
 
 # PDF Auto-load
 if st.session_state.vector_store is None and os.path.exists("uploads/pdf_name.txt"):
