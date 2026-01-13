@@ -224,7 +224,7 @@ with st.sidebar:
 
     st.sidebar.markdown("---")
     # DISCLAIMER KNOP
-    if st.sidebar.button("📄 Algemene Voorwaarden"):
+    if st.sidebar.button("Algemene Voorwaarden"):
         st.session_state.show_disclaimer = not st.session_state.show_disclaimer
 
     if st.session_state.show_disclaimer:
