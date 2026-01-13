@@ -9,7 +9,7 @@ import os
 # 1. Pagina Configuratie
 st.set_page_config(page_title="OERbot - Dulon College", page_icon="📚", layout="centered")
 
-# 2. Geavanceerde CSS (Light Mode Force & Mobiele Styling)
+# 2. Geavanceerde CSS (Outline Buttons, Dunner & Fix voor Icons)
 def apply_custom_css():
     st.markdown(f"""
         <style>
@@ -28,24 +28,23 @@ def apply_custom_css():
             font-family: 'Nunito', sans-serif !important;
         }}
 
-        /* STYLING VOOR DE KNOPPEN */
+        /* STYLING VOOR DE DUNNE OUTLINE KNOPPEN */
         .stButton>button {{
-            background-color: #e5241d !important;
-            color: white !important;
-            border-radius: 12px !important;
-            border: none !important;
-            padding: 10px 20px !important;
-            height: 4em !important;
+            background-color: white !important;
+            color: #e5241d !important;
+            border-radius: 10px !important;
+            border: 2px solid #e5241d !important;
+            padding: 5px 15px !important;
+            height: 2.8em !important;
             width: 100% !important;
-            font-weight: bold !important;
-            margin-bottom: 10px !important;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: all 0.3s ease;
+            font-weight: 600 !important;
+            margin-bottom: 8px !important;
+            transition: all 0.2s ease;
         }}
         .stButton>button:hover {{
-            background-color: #b31b17 !important;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            background-color: #e5241d !important;
+            color: white !important;
+            box-shadow: 0 2px 5px rgba(229, 36, 29, 0.3);
         }}
 
         /* CHAT BUBBELS */
@@ -59,12 +58,11 @@ def apply_custom_css():
 
 apply_custom_css()
 
-# 3. Gegevens en Modellen
+# 3. Gegevens ophalen
 api_key = st.secrets.get("openai_api_key")
 admin_user = st.secrets.get("admin_username")
 admin_pass = st.secrets.get("admin_password")
 
-# Gebruik GPT-4o voor de beste Persona-ervaring
 llm = ChatOpenAI(model="gpt-4o", api_key=api_key, temperature=0.4)
 
 # 4. Vector Store Functie
@@ -77,10 +75,7 @@ def initialize_vector_store(pdf_path):
         for page in doc:
             text = page.get_text().strip()
             if text:
-                documents.append(Document(
-                    page_content=text, 
-                    metadata={"page": page.number + 1}
-                ))
+                documents.append(Document(page_content=text, metadata={"page": page.number + 1}))
         return Chroma.from_documents(
             documents, embeddings, 
             persist_directory=os.path.join(os.getcwd(), "chroma_db", "shared_pdf")
@@ -104,7 +99,7 @@ with col2:
     else:
         st.title("🤖 OERbot")
 
-st.markdown("<p style='text-align: center; opacity: 0.8;'>Jouw klasgenoot voor vragen over de OER op het Dulon College.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw klasgenoot voor vragen over de OER op het Dulon College.</p>", unsafe_allow_html=True)
 
 # 7. Centrale Functie voor Vragen
 def handle_query(query):
@@ -120,39 +115,27 @@ def handle_query(query):
             response = "Ik kan je hier helaas alleen helpen met informatie uit de OER. Deze vraag staat niet in de OER, dus kan ik je hier niets over zeggen. 😊"
         else:
             context_text = "\n\n".join([d.page_content for d in docs])
-            # DE OERBOT PERSONA PROMPT
             system_prompt = f"""
             Jij bent OERbot, een vriendelijke MBO-klasgenoot op het Dulon College.
-            DOEL: Studenten helpen met vragen over examinering uit het document: “20240710_Examenreglement ROC A12 2024-2025 versie 1.0.pdf”.
+            DOEL: Studenten helpen met vragen over examinering uit de OER.
+            STIJL: B1-niveau, warm, empathisch, emoji's. Gebruik 'je'/'jij'.
             
-            STIJL:
-            - Praat warm, rustig, geruststellend en behulpzaam.
-            - Gebruik 'je' en 'jij'. Taalniveau B1 (geen moeilijke woorden).
-            - Gebruik emoji's (😊, 👍, ❗, 😔) op een natuurlijke manier.
-            - Je verzint niets. Alleen informatie uit de OER gebruiken.
-            
-            STRUCTUUR VAN JE ANTWOORD:
-            1. Bevestig gevoel (bijv: "Goed dat je dit even checkt!").
-            2. Samenvatting van de regel uit de OER.
-            3. ALTIJD bronvermelding met artikelnummer (bijv: artikel 11 lid 2).
-            4. Duidelijke Call to Action (wat moet de student doen?).
-            5. Positieve afsluiting.
+            ANTWOORD STRUCTUUR:
+            1. Bevestig gevoel.
+            2. Samenvatting regel uit OER met bron (artikel X).
+            3. Call to Action.
+            4. Positieve afsluiting.
 
             CONTEXT: {context_text}
             """
-            
-            chat_template = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                ("human", "{question}")
-            ])
-            
+            chat_template = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", "{question}")])
             formatted = chat_template.format_messages(question=query)
             full_response = ""
             for chunk in llm.stream(formatted):
                 full_response += chunk.content
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-# 8. Quick Actions (Knoppen met betere spacing)
+# 8. Quick Actions (Dunne Outline Buttons)
 st.markdown("#### Waar wil je meer over weten?")
 q_col1, q_col2 = st.columns(2, gap="small")
 with q_col1:
@@ -178,11 +161,13 @@ with q_col2:
 
 st.divider()
 
-# 9. Chat Geschiedenis
+# 9. Chat Geschiedenis (Fix voor Icons)
 bot_icon = "custom_bot_image.png" if os.path.exists("custom_bot_image.png") else "🤖"
 
 for message in st.session_state.messages:
-    with st.chat_message(message["role"], avatar=bot_icon if message["role"] == "assistant" else None):
+    # Als de rol 'user' is, gebruiken we None voor het standaard icoon, anders het bot-icoon
+    current_avatar = bot_icon if message["role"] == "assistant" else None
+    with st.chat_message(message["role"], avatar=current_avatar):
         st.markdown(message["content"])
 
 # 10. Chat Input
@@ -194,9 +179,9 @@ if chat_input := st.chat_input("Stel je eigen vraag aan OERbot..."):
 with st.sidebar:
     if not st.session_state.logged_in:
         st.title("Admin")
-        u = st.text_input("Gebruikersnaam")
-        p = st.text_input("Wachtwoord", type="password")
-        if st.button("Inloggen"):
+        u = st.text_input("User")
+        p = st.text_input("Pass", type="password")
+        if st.button("Login"):
             if u == admin_user and p == admin_pass:
                 st.session_state.logged_in = True
                 st.rerun()
