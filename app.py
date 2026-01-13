@@ -1,17 +1,10 @@
- # De import statements laden de benodigde bibliotheken en modules voor de applicatie.
-
+# De import statements laden de benodigde bibliotheken en modules voor de applicatie.
 import streamlit as st
-
-from langchain_core.documents import Document
-
+from langchain_core.documents import Document  # Updated
 from langchain_openai import OpenAIEmbeddings, OpenAI
-
 from langchain_community.vectorstores import Chroma
-
-from langchain.prompts import ChatPromptTemplate
-
+from langchain_core.prompts import ChatPromptTemplate  # Updated
 import fitz
-
 import os
 
 
