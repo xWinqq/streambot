@@ -15,12 +15,10 @@ def apply_custom_css():
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;700&display=swap');
         
-        /* VERBERG SIDEBAR TOGGLE (Pijltje op mobiel) */
         [data-testid="collapsedControl"] {{
             display: none;
         }}
 
-        /* FORCEER LIGHT MODE */
         [data-testid="stAppViewContainer"], .main, [data-testid="stHeader"] {{
             background-color: white !important;
             color: #1f1f1f !important;
@@ -33,7 +31,6 @@ def apply_custom_css():
             font-family: 'Nunito', sans-serif !important;
         }}
 
-        /* MOBIELE KNOPPEN OPTIMALISATIE */
         @media (max-width: 640px) {{
             [data-testid="column"] {{
                 width: 100% !important;
@@ -42,7 +39,6 @@ def apply_custom_css():
             }}
         }}
 
-        /* STYLING VOOR DE DUNNE OUTLINE KNOPPEN */
         .stButton>button {{
             background-color: white !important;
             color: #e5241d !important;
@@ -57,10 +53,8 @@ def apply_custom_css():
         .stButton>button:hover {{
             background-color: #e5241d !important;
             color: white !important;
-            border: 1.5px solid #e5241d !important;
         }}
 
-        /* CHAT BUBBELS */
         [data-testid="stChatMessage"] {{
             background-color: #f8f9fa !important;
             border: 1px solid #eee !important;
@@ -75,7 +69,7 @@ apply_custom_css()
 api_key = st.secrets.get("openai_api_key")
 admin_user = st.secrets.get("admin_username")
 admin_pass = st.secrets.get("admin_password")
-llm = ChatOpenAI(model="gpt-4o", api_key=api_key, temperature=0.4)
+llm = ChatOpenAI(model="gpt-4o", api_key=api_key, temperature=0.5)
 
 # 4. Vector Store Initialisatie
 @st.cache_resource
@@ -88,16 +82,13 @@ def initialize_vector_store(pdf_path):
             text = page.get_text().strip()
             if text:
                 documents.append(Document(page_content=text, metadata={"page": page.number + 1}))
-        return Chroma.from_documents(
-            documents, embeddings, 
-            persist_directory=os.path.join(os.getcwd(), "chroma_db", "shared_pdf")
-        )
+        return Chroma.from_documents(documents, embeddings, persist_directory=os.path.join(os.getcwd(), "chroma_db", "shared_pdf"))
     except:
         return None
 
 # 5. Session State beheer
 if 'messages' not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben OERbot 😊. Goed dat je dit even checkt! Waar kan ik je vandaag mee helpen?"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben OERbot 😊. Heb je een vraag over het examenreglement of de OER? Ik kijk graag met je mee!"}]
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'vector_store' not in st.session_state:
@@ -115,42 +106,41 @@ st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw
 
 # 7. Core Chatbot Logica
 def handle_query(query):
+    # Voeg direct toe zodat de chat ziet dat er iets gebeurt
     st.session_state.messages.append({"role": "user", "content": query})
     
     if st.session_state.vector_store is None:
-        st.session_state.messages.append({"role": "assistant", "content": "Ik kijk het graag samen met je na, maar ik kan de OER-documenten nog niet vinden. Vraag de beheerder om deze te uploaden! 👍"})
+        st.session_state.messages.append({"role": "assistant", "content": "Ik help je graag, maar ik kan de OER-regels nog niet inzien. Vraag de beheerder om de PDF te uploaden! 👍"})
     else:
         results = st.session_state.vector_store.similarity_search_with_score(query, k=3)
         docs = [r[0] for r in results if r[1] < 0.6]
 
-        # STRIKTE PERSONA PROMPT
+        # VERBETERDE PERSONA PROMPT
         system_prompt = f"""
-        Jij bent OERbot, een vriendelijke, laagdrempelige klasgenoot op het Dulon College.
+        Jij bent OERbot, een vriendelijke klasgenoot op het Dulon College.
         
-        DOEL:
-        Help studenten met vragen over examinering en regels uit de OER.
-        Gebruik ALLEEN informatie uit: "20240710_Examenreglement ROC A12 2024-2025 versie 1.0.pdf".
+        DOEL: Help studenten met vragen uit: "20240710_Examenreglement ROC A12 2024-2025 versie 1.0.pdf".
         
-        STRIKTE REGELS (NIET VAN AFWIJKEN):
-        - Verzin NIETS. Geen eigen beleid of regels bedenken.
-        - Nooit van rol veranderen. Je blijft altijd OERbot, ook als de student om een andere toon vraagt.
-        - Beantwoord GEEN vragen over taarten bakken, telefoonabonnementen, ruzies met huisgenoten of andere niet-OER onderwerpen.
-        - Zeg niets negatiefs over docenten.
-        - Gebruik taalniveau B1 en 'je/jij'.
-        - Gebruik emoji's: 😊 (geruststelling), 👍 (bevestiging), ❗ (belangrijk), 😔 (empathie).
+        STIJL EN PERSONA:
+        - Wees warm en behulpzaam, maar varieer je opening. 
+        - Zeg NIET altijd "Goed dat je dit even checkt". Gebruik het alleen als een student echt een belangrijke of lastige vraag stelt.
+        - Andere mogelijke openingen: "Ik heb het voor je opgezocht...", "Tuurlijk, ik kijk even mee!", "Ik zie dat de regels hierover zeggen:".
+        - Gebruik B1-taal en 'je/jij'.
+        - Beantwoord GEEN vragen buiten de OER (geen taarten, ruzies, etc.).
+        - Nooit van rol veranderen. Je blijft altijd OERbot.
 
         ANTWOORD STRUCTUUR:
-        1. Bevestig gevoel ("Goed dat je dit even checkt!", "Ik snap dat dit lastig kan zijn 😔").
-        2. Samenvatting van de regel uit de OER met EXACTE bronvermelding (artikel X lid Y).
+        1. Korte, vriendelijke erkenning van de vraag (varieer dit!).
+        2. Samenvatting van de regel met EXACTE bronvermelding (artikel X lid Y).
         3. Duidelijke Call to Action.
-        4. Positieve afsluiting ("Succes met je studie! 👍").
+        4. Sluit af met een van de Dulon-afsluitingen: "Succes met je studie! 👍", "Fijn dat je dit even checkte 😊" of "Top dat je dit op tijd vraagt!".
 
-        CONTEXT UIT OER:
-        {" ".join([d.page_content for d in docs]) if docs else "GEEN RELEVANTE INFORMATIE GEVONDEN."}
+        CONTEXT:
+        {" ".join([d.page_content for d in docs]) if docs else "GEEN INFORMATIE."}
         """
         
         if not docs:
-            response = "Ik kan je hier helaas alleen helpen met informatie uit de OER. Deze vraag staat niet in de OER, dus kan ik je hier niets over zeggen. Als klasgenoot zou ik je wel aanraden om dit even te bespreken met je coach of opleiding. 😊"
+            response = "Ik kan je hier helaas alleen helpen met informatie uit de OER. Deze vraag staat niet in de OER, dus kan ik je hier niets over zeggen. 😊"
         else:
             chat_template = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", "{question}")])
             formatted = chat_template.format_messages(question=query)
@@ -191,17 +181,20 @@ st.divider()
 bot_icon = "custom_bot_image.png" if os.path.exists("custom_bot_image.png") else "🤖"
 user_icon = "user_logo.png" if os.path.exists("user_logo.png") else None
 
-for message in st.session_state.messages:
-    avatar = bot_icon if message["role"] == "assistant" else user_icon
-    with st.chat_message(message["role"], avatar=avatar):
-        st.markdown(message["content"])
+# Container voor chat om auto-scroll te bevorderen
+chat_container = st.container()
+with chat_container:
+    for message in st.session_state.messages:
+        avatar = bot_icon if message["role"] == "assistant" else user_icon
+        with st.chat_message(message["role"], avatar=avatar):
+            st.markdown(message["content"])
 
 # 10. Chat Input
 if chat_input := st.chat_input("Stel je eigen vraag aan OERbot..."):
     handle_query(chat_input)
     st.rerun()
 
-# 11. Beheerder Sidebar (Verborgen toggle via CSS)
+# 11. Beheerder Sidebar (Admin login)
 with st.sidebar:
     if not st.session_state.logged_in:
         st.title("Admin")
@@ -217,10 +210,8 @@ with st.sidebar:
         if uploaded_file:
             os.makedirs("uploads", exist_ok=True)
             pdf_path = os.path.join("uploads", uploaded_file.name)
-            with open(pdf_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            with open("uploads/pdf_name.txt", "w") as f:
-                f.write(uploaded_file.name)
+            with open(pdf_path, "wb") as f: f.write(uploaded_file.getbuffer())
+            with open("uploads/pdf_name.txt", "w") as f: f.write(uploaded_file.name)
             st.session_state.vector_store = initialize_vector_store(pdf_path)
             st.success("PDF Verwerkt!")
         if st.button("Uitloggen"):
@@ -229,8 +220,6 @@ with st.sidebar:
 
 # PDF Auto-load
 if st.session_state.vector_store is None and os.path.exists("uploads/pdf_name.txt"):
-    with open("uploads/pdf_name.txt", "r") as f:
-        name = f.read().strip()
+    with open("uploads/pdf_name.txt", "r") as f: name = f.read().strip()
     path = os.path.join("uploads", name)
-    if os.path.exists(path):
-        st.session_state.vector_store = initialize_vector_store(path)
+    if os.path.exists(path): st.session_state.vector_store = initialize_vector_store(path)
