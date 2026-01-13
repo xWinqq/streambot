@@ -516,7 +516,7 @@ SCHRIJFTIPS:
 
                     formatted_prompt = chat_prompt.format(context=context, question=prompt)
 
-                    response = llm(formatted_prompt)  # OpenAI model returns a string directly
+                    response = llm.invoke(formatted_prompt)  # OpenAI model returns a string directly
 
 
                     # Simplify and format the response
