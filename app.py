@@ -74,7 +74,7 @@ apply_custom_css()
 api_key = st.secrets.get("openai_api_key")
 admin_user = st.secrets.get("admin_username")
 admin_pass = st.secrets.get("admin_password")
-llm = ChatOpenAI(model="gpt-4o", api_key=api_key, temperature=0.5)
+llm = ChatOpenAI(model="gpt-5-nano", api_key=api_key, temperature=0.5)
 
 # 4. Vector Store Initialisatie
 @st.cache_resource
