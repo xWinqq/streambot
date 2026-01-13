@@ -6,39 +6,55 @@ from langchain_core.prompts import ChatPromptTemplate
 import fitz
 import os
 
-# 1. Page configuration
-st.set_page_config(page_title="OERbot - Je OER Klasgenoot", page_icon="📚")
+# 1. Pagina Configuratie
+st.set_page_config(page_title="OERbot - Dulon College", page_icon="📚")
 
-# 2. Custom CSS for Dulon College / OERbot vibe
+# 2. Custom CSS voor de Dulon Rode Kleur (#e5241d)
 def apply_custom_css():
-    st.markdown("""
+    st.markdown(f"""
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;700&display=swap');
-        html, body, [class*="css"]  {
+        
+        /* Algemene font */
+        html, body, [class*="css"]  {{
             font-family: 'Nunito', sans-serif;
-        }
-        .stChatMessage {
+        }}
+
+        /* Accent kleur voor knoppen */
+        .stButton>button {{
+            background-color: #e5241d;
+            color: white;
+            border-radius: 10px;
+            border: none;
+            width: 100%;
+        }}
+        .stButton>button:hover {{
+            background-color: #b31b17;
+            color: white;
+        }}
+
+        /* Chat bubbels styling */
+        .stChatMessage {{
             border-radius: 15px;
-            margin-bottom: 10px;
-        }
+        }}
+
+        /* Sidebar styling */
+        [data-testid="stSidebar"] {{
+            background-color: #f9f9f9;
+        }}
         </style>
     """, unsafe_allow_html=True)
 
 apply_custom_css()
 
-# 3. Retrieve Secrets
+# 3. Gegevens ophalen
 api_key = st.secrets.get("openai_api_key")
 admin_user = st.secrets.get("admin_username")
 admin_pass = st.secrets.get("admin_password")
 
-if not api_key:
-    st.error("OpenAI API Sleutel ontbreekt in de instellingen!")
-    st.stop()
+llm = ChatOpenAI(model="gpt-4o", api_key=api_key, temperature=0.4)
 
-# Initialize Chat Model (Smarter at following persona instructions)
-llm = ChatOpenAI(model="gpt-4o", api_key=api_key, temperature=0.5)
-
-# 4. Vector Store Logic
+# 4. Vector Store Functie
 @st.cache_resource
 def initialize_vector_store(pdf_path):
     try:
@@ -50,41 +66,119 @@ def initialize_vector_store(pdf_path):
             if text:
                 documents.append(Document(
                     page_content=text, 
-                    metadata={"page": page.number + 1, "source": os.path.basename(pdf_path)}
+                    metadata={"page": page.number + 1}
                 ))
-
-        persist_directory = os.path.join(os.getcwd(), "chroma_db", "shared_pdf")
         vector_store = Chroma.from_documents(
-            documents, 
-            embeddings, 
-            persist_directory=persist_directory
+            documents, embeddings, 
+            persist_directory=os.path.join(os.getcwd(), "chroma_db", "shared_pdf")
         )
         return vector_store
     except Exception as e:
-        st.error(f"Fout bij het laden van het document: {str(e)}")
         return None
 
-# 5. Initialize Session States
-if 'vector_store' not in st.session_state:
-    st.session_state.vector_store = None
+# 5. Session States initialiseren
 if 'messages' not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben OERbot 😊. Goed dat je er bent! Heb je een vraag over het examenreglement of de OER? Ik kijk graag even met je mee!"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben OERbot 😊. Jouw hulpje voor alle vragen over het examenreglement. Waar kan ik je vandaag mee helpen?"}]
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
+if 'vector_store' not in st.session_state:
+    st.session_state.vector_store = None
 
-# 6. Admin Sidebar
-st.sidebar.title("OERbot Beheer")
-if not st.session_state.logged_in:
-    u = st.sidebar.text_input("Gebruikersnaam")
-    p = st.sidebar.text_input("Wachtwoord", type="password")
-    if st.sidebar.button("Inloggen"):
-        if u == admin_user and p == admin_pass:
-            st.session_state.logged_in = True
-            st.rerun()
+# 6. Logo en Branding bovenaan
+col1, col2, col3 = st.columns([1,2,1])
+with col2:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", use_container_width=True)
+    else:
+        st.title("🤖 OERbot")
+
+st.caption("Jouw klasgenoot voor vragen over de OER op het Dulon College.")
+
+# 7. Functie voor het verwerken van vragen (voor Chat én Knoppen)
+def handle_query(query):
+    # Voeg gebruikersvraag toe aan de chat
+    st.session_state.messages.append({"role": "user", "content": query})
+    
+    if st.session_state.vector_store is None:
+        response = "Oeps! Ik kan de OER nog niet lezen. Vraag de beheerder om een PDF te uploaden via het menu aan de linkerkant. 👍"
+        st.session_state.messages.append({"role": "assistant", "content": response})
+    else:
+        # Zoek context
+        results = st.session_state.vector_store.similarity_search_with_score(query, k=3)
+        docs = [r[0] for r in results if r[1] < 0.6]
+
+        if not docs:
+            response = "Ik kan je hier helaas alleen helpen met informatie uit de OER. Deze vraag staat niet in de OER, dus kan ik je hier niets over zeggen. 😊"
         else:
-            st.sidebar.error("Onjuiste gegevens")
+            context_text = "\n\n".join([d.page_content for d in docs])
+            system_prompt = f"""
+            Jij bent OERbot, een vriendelijke MBO-klasgenoot.
+            Stijl: B1-niveau, warm, empathisch, emoji's (😊, 👍, ❗, 😔).
+            Gebruik ALLEEN deze context: {context_text}
+            Structuur: 1. Bevestig gevoel. 2. Samenvatting met bron (artikel X). 3. Call to action. 4. Positieve afsluiting.
+            """
+            
+            chat_template = ChatPromptTemplate.from_messages([
+                ("system", system_prompt),
+                ("human", "{question}")
+            ])
+            
+            # Genereer antwoord
+            formatted = chat_template.format_messages(question=query)
+            full_response = ""
+            for chunk in llm.stream(formatted):
+                full_response += chunk.content
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+# 8. Quick Actions (Knoppen)
+st.markdown("### Waar wil je meer over weten?")
+q_col1, q_col2 = st.columns(2)
+with q_col1:
+    if st.button("🔄 Herkansingen"):
+        handle_query("Hoe werkt een herkansing?")
+        st.rerun()
+    if st.button("🤒 Ziek bij examen"):
+        handle_query("Wat moet ik doen als ik ziek ben voor een examen?")
+        st.rerun()
+    if st.button("📝 Vrijstellingen"):
+        handle_query("Hoe kan ik vrijstelling aanvragen voor een vak?")
+        st.rerun()
+with q_col2:
+    if st.button("🚫 Fraude regels"):
+        handle_query("Wat gebeurt er als ik word verdacht van fraude?")
+        st.rerun()
+    if st.button("⚖️ Klacht indienen"):
+        handle_query("Hoe kan ik een klacht of bezwaar indienen?")
+        st.rerun()
+    if st.button("👨‍🏫 Persoonlijke hulp"):
+        handle_query("Wie kan mij helpen bij persoonlijke omstandigheden?")
+        st.rerun()
+
+st.divider()
+
+# 9. Chat Geschiedenis Tonen
+bot_icon = "custom_bot_image.png" if os.path.exists("custom_bot_image.png") else "🤖"
+
+for message in st.session_state.messages:
+    with st.chat_message(message["role"], avatar=bot_icon if message["role"] == "assistant" else None):
+        st.markdown(message["content"])
+
+# 10. Chat Input
+if chat_input := st.chat_input("Stel je eigen vraag..."):
+    handle_query(chat_input)
+    st.rerun()
+
+# 11. Beheerder Sidebar (Onveranderd)
+if not st.session_state.logged_in:
+    with st.sidebar.expander("Beheerder Login"):
+        u = st.text_input("User")
+        p = st.text_input("Pass", type="password")
+        if st.button("Login"):
+            if u == admin_user and p == admin_pass:
+                st.session_state.logged_in = True
+                st.rerun()
 else:
-    st.sidebar.success("Ingelogd als beheerder")
+    st.sidebar.title("Beheer")
     uploaded_file = st.sidebar.file_uploader("Upload OER PDF", type="pdf")
     if uploaded_file:
         os.makedirs("uploads", exist_ok=True)
@@ -94,102 +188,15 @@ else:
         with open("uploads/pdf_name.txt", "w") as f:
             f.write(uploaded_file.name)
         st.session_state.vector_store = initialize_vector_store(pdf_path)
-        st.sidebar.success(f"{uploaded_file.name} is nu actief!")
+        st.sidebar.success("PDF Verwerkt!")
+    if st.sidebar.button("Uitloggen"):
+        st.session_state.logged_in = False
+        st.rerun()
 
-# Auto-load logic
+# Auto-load logic voor PDF
 if st.session_state.vector_store is None and os.path.exists("uploads/pdf_name.txt"):
     with open("uploads/pdf_name.txt", "r") as f:
         name = f.read().strip()
     path = os.path.join("uploads", name)
     if os.path.exists(path):
         st.session_state.vector_store = initialize_vector_store(path)
-
-# 7. Main Interface
-st.title("🤖 OERbot")
-st.caption("Jouw klasgenoot voor vragen over het examenreglement op het Dulon College.")
-
-# FAQ Section
-st.markdown("### Veelgestelde vragen")
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("Hoe werkt herkansing?"):
-        st.session_state.messages.append({"role": "user", "content": "Hoe werkt een herkansing?"})
-with col2:
-    if st.button("Wat als ik ziek ben?"):
-        st.session_state.messages.append({"role": "user", "content": "Wat moet ik doen als ik ziek ben voor een examen?"})
-
-# 8. Chat Display
-bot_avatar = "custom_bot_image.png" if os.path.exists("custom_bot_image.png") else "🤖"
-
-for message in st.session_state.messages:
-    with st.chat_message(message["role"], avatar=bot_avatar if message["role"] == "assistant" else None):
-        st.markdown(message["content"])
-
-# 9. Chat Logic
-if prompt := st.chat_input("Stel je vraag aan OERbot..."):
-    # User message
-    st.chat_message("user").markdown(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
-
-    if st.session_state.vector_store is None:
-        with st.chat_message("assistant", avatar=bot_avatar):
-            msg = "Ik heb nog geen documenten kunnen vinden om te lezen. Vraag even aan je docent of ze de OER willen uploaden! 👍"
-            st.markdown(msg)
-            st.session_state.messages.append({"role": "assistant", "content": msg})
-    else:
-        # Search context
-        results = st.session_state.vector_store.similarity_search_with_score(prompt, k=3)
-        # Filter logic: lower score = better match in Chroma
-        docs = [r[0] for r in results if r[1] < 0.6] 
-
-        if not docs:
-            response = "Ik kan je hier helaas alleen helpen met informatie uit de OER. Deze vraag staat niet in de OER, dus kan ik je hier niets over zeggen. Als klasgenoot zou ik je wel aanraden om dit even te bespreken met je coach of opleiding. 😊"
-        else:
-            context_text = "\n\n".join([d.page_content for d in docs])
-            
-            system_prompt = """
-            Jij bent OERbot, een vriendelijke, laagdrempelige klasgenoot op het Dulon College. 
-            Je helpt studenten bij vragen over de OER (Onderwijs- en Examenregeling).
-
-            STIJLREGELS:
-            - Taalstijl: B1-niveau. Simpel, stap voor stap, geen moeilijke woorden.
-            - Toon: Warm, rustig, geruststellend, alsof je naast de student in de klas zit.
-            - Gebruik 'je' en 'jij'.
-            - Gebruik emoji's (😊, 👍, ❗, 😔) op een natuurlijke manier.
-            - Nooit formeel of afstandelijk. Nooit commanderend.
-            - Begin vaak met zinnen als: "Goed dat je dit even checkt!", "Snap dat dit verwarrend voelt." of "Ik kijk het graag samen met je na."
-
-            INHOUDSREGELS:
-            - Gebruik ALLEEN de meegeleverde context uit het bestand: 20240710_Examenreglement ROC A12 2024-2025 versie 1.0.pdf.
-            - Verzin niets. Als het er niet staat, zeg je dat vriendelijk.
-            - Geef GEEN persoonlijke meningen of negatieve opmerkingen over docenten.
-            - Geef ALTIJD een bronvermelding (bijv. artikel 11 lid 2) bij elke feitelijke regel.
-
-            ANTWOORD STRUCTUUR:
-            1. Bevestig het gevoel van de student.
-            2. Geef een samenvatting van de regels uit de OER (met bronvermelding).
-            3. Geef een duidelijke 'Call to action' (Wat moet de student nu doen?).
-            4. Sluit altijd positief af (bijv. "Succes met je studie! 👍").
-
-            CONTEXT:
-            {context}
-            """
-            
-            chat_template = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                ("human", "{question}")
-            ])
-            
-            # Use streaming for better UI experience
-            with st.chat_message("assistant", avatar=bot_avatar):
-                response_container = st.empty()
-                full_response = ""
-                
-                formatted_prompt = chat_template.format_messages(context=context_text, question=prompt)
-                
-                for chunk in llm.stream(formatted_prompt):
-                    full_response += chunk.content
-                    response_container.markdown(full_response + "▌")
-                
-                response_container.markdown(full_response)
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
