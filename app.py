@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from langchain_openai import OpenAIEmbeddings, OpenAI
 
