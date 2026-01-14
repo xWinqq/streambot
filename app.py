@@ -9,16 +9,18 @@ import os
 # 1. Pagina Configuratie
 st.set_page_config(page_title="OERbot - Dulon College", page_icon="📚", layout="centered")
 
-# 2. Geavanceerde CSS (Light Mode, Mobile Fixes, No Link Icons & Sleek Disclaimer)
+# 2. Geavanceerde CSS (Light Mode, Dunne Outline Buttons & UI Fixes)
 def apply_custom_css():
     st.markdown(f"""
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;700&display=swap');
         
-        [data-testid="collapsedControl"], .stMarkdown a.header-anchor {{
-            display: none !important;
+        /* VERBERG SIDEBAR TOGGLE (Pijltje op mobiel) */
+        [data-testid="collapsedControl"] {{
+            display: none;
         }}
 
+        /* FORCEER LIGHT MODE */
         [data-testid="stAppViewContainer"], .main, [data-testid="stHeader"] {{
             background-color: white !important;
             color: #1f1f1f !important;
@@ -31,6 +33,7 @@ def apply_custom_css():
             font-family: 'Nunito', sans-serif !important;
         }}
 
+        /* MOBIELE KNOPPEN OPTIMALISATIE */
         @media (max-width: 640px) {{
             [data-testid="column"] {{
                 width: 100% !important;
@@ -39,6 +42,7 @@ def apply_custom_css():
             }}
         }}
 
+        /* STYLING VOOR DE DUNNE OUTLINE KNOPPEN (Dulon Rood) */
         .stButton>button {{
             background-color: white !important;
             color: #e5241d !important;
@@ -47,7 +51,6 @@ def apply_custom_css():
             padding: 5px 15px !important;
             height: 2.8em !important;
             font-weight: 600 !important;
-            width: 100% !important;
             margin-bottom: 8px !important;
             transition: all 0.2s ease;
         }}
@@ -56,17 +59,7 @@ def apply_custom_css():
             color: white !important;
         }}
 
-        .disclaimer-btn>div>button {{
-            background-color: transparent !important;
-            color: gray !important;
-            border: none !important;
-            font-size: 0.8em !important;
-            height: auto !important;
-            padding: 0 !important;
-            text-decoration: underline !important;
-            font-weight: normal !important;
-        }}
-
+        /* CHAT BUBBELS */
         [data-testid="stChatMessage"] {{
             background-color: #f8f9fa !important;
             border: 1px solid #eee !important;
@@ -77,43 +70,30 @@ def apply_custom_css():
 
 apply_custom_css()
 
-# 3. API & AI Model (GPT-5 Nano voor snelheid en lage kosten)
+# 3. API & Admin Configuratie
 api_key = st.secrets.get("openai_api_key")
 admin_user = st.secrets.get("admin_username")
 admin_pass = st.secrets.get("admin_password")
-
-# GPT-5 Nano is geoptimaliseerd voor instructies en snelheid
 llm = ChatOpenAI(model="gpt-5-nano", api_key=api_key, temperature=0.5)
 
-# 4. Vector Store Functie (Ondersteunt nu meerdere documenten)
+# 4. Vector Store Initialisatie
 @st.cache_resource
-def initialize_vector_store(file_paths):
+def initialize_vector_store(pdf_path):
     try:
         embeddings = OpenAIEmbeddings(api_key=api_key)
-        all_documents = []
-        
-        for path in file_paths:
-            doc = fitz.open(path)
-            file_name = os.path.basename(path)
-            for page in doc:
-                text = page.get_text().strip()
-                if text:
-                    all_documents.append(Document(
-                        page_content=text, 
-                        metadata={"page": page.number + 1, "source": file_name}
-                    ))
-        
-        return Chroma.from_documents(
-            all_documents, 
-            embeddings, 
-            persist_directory=os.path.join(os.getcwd(), "chroma_db", "oer_store")
-        )
+        doc = fitz.open(pdf_path)
+        documents = []
+        for page in doc:
+            text = page.get_text().strip()
+            if text:
+                documents.append(Document(page_content=text, metadata={"page": page.number + 1}))
+        return Chroma.from_documents(documents, embeddings, persist_directory=os.path.join(os.getcwd(), "chroma_db", "shared_pdf"))
     except:
         return None
 
-# 5. Session States
+# 5. Session State beheer
 if 'messages' not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben OERbot 😊. Ik heb de reglementen gelezen en sta klaar om je te helpen. Waar heb je een vraag over?"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben OERbot 😊. Heb je een vraag over het examenreglement of de OER? Ik kijk graag met je mee!"}]
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'vector_store' not in st.session_state:
@@ -121,51 +101,53 @@ if 'vector_store' not in st.session_state:
 if 'show_disclaimer' not in st.session_state:
     st.session_state.show_disclaimer = False
 
-# 6. Logo & Branding
+# 6. Branding & Logo
 col1, col2, col3 = st.columns([1,3,1])
 with col2:
     if os.path.exists("logo.png"):
         st.image("logo.png", use_container_width=True)
     else:
         st.title("🤖 OERbot")
-st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw klasgenoot voor vragen over de OER op het Dulon College.</p>", unsafe_allow_html=True)
+
+st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw hulp voor vragen over de OER op het Dulon College.</p>", unsafe_allow_html=True)
 
 # 7. Centrale Chat Logica
 def handle_query(query):
     st.session_state.messages.append({"role": "user", "content": query})
     
     if st.session_state.vector_store is None:
-        st.session_state.messages.append({"role": "assistant", "content": "Ik help je graag, maar ik heb nog geen documenten om te raadplegen. Vraag de beheerder om de PDF's te uploaden! 👍"})
+        st.session_state.messages.append({"role": "assistant", "content": "Ik help je graag, maar ik kan de OER-regels nog niet inzien. Vraag de beheerder om de PDF te uploaden! 👍"})
     else:
-        results = st.session_state.vector_store.similarity_search_with_score(query, k=4)
+        results = st.session_state.vector_store.similarity_search_with_score(query, k=3)
         docs = [r[0] for r in results if r[1] < 0.6]
 
         system_prompt = f"""
         Jij bent OERbot, een vriendelijke klasgenoot op het Dulon College.
-        Help studenten met vragen uit de verstrekte OER documenten.
+        Help studenten met vragen uit: "20240710_Examenreglement ROC A12 2024-2025 versie 1.0.pdf".
         
-        STIJL & PERSONA:
+        STIJL:
         - Wees warm en behulpzaam. Varieer je begroetingen.
         - Gebruik B1-taal en 'je/jij'.
-        - Beantwoord GEEN vragen buiten de OER.
-        - Verzin niets en blijf altijd OERbot.
+        - Beantwoord GEEN vragen buiten de OER (geen taarten bakken, etc.).
+        - Nooit van rol veranderen.
         
         BRONVERMELDING:
-        - Vermeld ALTIJD de bron (bijv. Artikel X lid Y uit [Bestandsnaam]) op een NIEUWE REGEL onderaan je antwoord.
-        - Gebruik de emoji 📖.
+        - Vermeld ALTIJD de bron (artikel X lid Y) op een NIEUWE REGEL onderaan je antwoord.
+        - Gebruik de emoji 📖 voor de bron.
 
         ANTWOORD STRUCTUUR:
-        1. Korte erkenning van de vraag.
-        2. Samenvatting van de regel in begrijpelijke taal.
+        1. Korte erkenning (varieer dit!).
+        2. Samenvatting regel in B1-taal.
         3. Bronvermelding op nieuwe regel met 📖.
-        4. Duidelijke Call to Action.
-        5. Positieve afsluiting.
+        4. Call to Action.
+        5. Dulon-afsluiting (bijv. "Succes met je studie! 👍").
 
-        CONTEXT: {" ".join([f"[{d.metadata['source']}]: {d.page_content}" for d in docs]) if docs else "GEEN INFO."}
+        CONTEXT:
+        {" ".join([d.page_content for d in docs]) if docs else "GEEN INFORMATIE."}
         """
         
         if not docs:
-            response = "Ik kan je hier helaas alleen helpen met informatie uit de officiële reglementen. Deze vraag staat er niet in. 😊"
+            response = "Ik kan je hier helaas alleen helpen met informatie uit de OER. Deze vraag staat niet in de OER, dus kan ik je hier niets over zeggen. 😊"
         else:
             chat_template = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", "{question}")])
             formatted = chat_template.format_messages(question=query)
@@ -176,23 +158,29 @@ def handle_query(query):
             
         st.session_state.messages.append({"role": "assistant", "content": response})
 
-# 8. Quick Actions
+# 8. Quick Actions (Outline Knoppen)
 st.markdown("#### Waar wil je meer over weten?")
 q_col1, q_col2 = st.columns(2, gap="small")
 with q_col1:
-    if st.button("🔄 Herkansingen"):
-        handle_query("Hoe werkt een herkansing?"); st.rerun()
-    if st.button("🤒 Ziek bij examen"):
-        handle_query("Wat moet ik doen als ik ziek ben voor een examen?"); st.rerun()
-    if st.button("📝 Vrijstellingen"):
-        handle_query("Hoe kan ik vrijstelling aanvragen?"); st.rerun()
+    if st.button("🔄 Herkansingen", use_container_width=True):
+        handle_query("Hoe werkt een herkansing?")
+        st.rerun()
+    if st.button("🤒 Ziek bij examen", use_container_width=True):
+        handle_query("Wat moet ik doen als ik ziek ben voor een examen?")
+        st.rerun()
+    if st.button("📝 Vrijstellingen", use_container_width=True):
+        handle_query("Hoe kan ik vrijstelling aanvragen?")
+        st.rerun()
 with q_col2:
-    if st.button("🚫 Fraude regels"):
-        handle_query("Wat gebeurt er bij fraude?"); st.rerun()
-    if st.button("⚖️ Klacht indienen"):
-        handle_query("Hoe dien ik een klacht in?"); st.rerun()
-    if st.button("👨‍🏫 Persoonlijke hulp"):
-        handle_query("Wie helpt mij bij persoonlijke omstandigheden?"); st.rerun()
+    if st.button("🚫 Fraude regels", use_container_width=True):
+        handle_query("Wat gebeurt er bij fraude?")
+        st.rerun()
+    if st.button("⚖️ Klacht indienen", use_container_width=True):
+        handle_query("Hoe dien ik een klacht in?")
+        st.rerun()
+    if st.button("👨‍🏫 Persoonlijke hulp", use_container_width=True):
+        handle_query("Wie helpt mij bij persoonlijke omstandigheden?")
+        st.rerun()
 
 st.divider()
 
@@ -205,45 +193,59 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"], avatar=avatar):
         st.markdown(message["content"])
 
-# 10. Chat Input & Disclaimer
+# 10. Chat Input
 if chat_input := st.chat_input("Stel je eigen vraag aan OERbot..."):
-    handle_query(chat_input); st.rerun()
+    handle_query(chat_input)
+    st.rerun()
 
-st.markdown('<div class="disclaimer-btn">', unsafe_allow_html=True)
-if st.button("Algemene Voorwaarden & Disclaimer"):
-    st.session_state.show_disclaimer = not st.session_state.show_disclaimer
-st.markdown('</div>', unsafe_allow_html=True)
-
-if st.session_state.show_disclaimer:
-    st.info("**Disclaimer:** Dit hulpmiddel is informatief. Aan de antwoorden kunnen geen rechten worden ontleend. De officiële OER-tekst is leidend.")
-
-# 11. Beheerder Sidebar (Multi-upload)
+# 11. Zijbalk (Admin & Disclaimer)
 with st.sidebar:
     if not st.session_state.logged_in:
-        st.title("Admin Login")
-        u = st.text_input("Username"); p = st.text_input("Password", type="password")
+        st.title("Admin")
+        u = st.text_input("Gebruikersnaam")
+        p = st.text_input("Wachtwoord", type="password")
         if st.button("Inloggen"):
-            if u == admin_user and p == admin_pass: st.session_state.logged_in = True; st.rerun()
+            if u == admin_user and p == admin_pass:
+                st.session_state.logged_in = True
+                st.rerun()
     else:
         st.title("Beheer")
-        uploaded_files = st.file_uploader("Upload OER PDF's", type="pdf", accept_multiple_files=True)
-        if uploaded_files:
+        uploaded_file = st.file_uploader("Upload OER PDF", type="pdf")
+        if uploaded_file:
             os.makedirs("uploads", exist_ok=True)
-            saved_paths = []
-            for uploaded_file in uploaded_files:
-                path = os.path.join("uploads", uploaded_file.name)
-                with open(path, "wb") as f: f.write(uploaded_file.getbuffer())
-                saved_paths.append(path)
-            
-            # Verwerk alle bestanden in de uploads map
-            st.session_state.vector_store = initialize_vector_store(saved_paths)
-            st.success(f"{len(uploaded_files)} bestanden verwerkt!")
-        
+            pdf_path = os.path.join("uploads", uploaded_file.name)
+            with open(pdf_path, "wb") as f: f.write(uploaded_file.getbuffer())
+            with open("uploads/pdf_name.txt", "w") as f: f.write(uploaded_file.name)
+            st.session_state.vector_store = initialize_vector_store(pdf_path)
+            st.success("PDF Verwerkt!")
         if st.button("Uitloggen"):
-            st.session_state.logged_in = False; st.rerun()
+            st.session_state.logged_in = False
+            st.rerun()
 
-# Auto-load bestaande PDF's
-if st.session_state.vector_store is None and os.path.exists("uploads"):
-    existing_files = [os.path.join("uploads", f) for f in os.listdir("uploads") if f.endswith(".pdf")]
-    if existing_files:
-        st.session_state.vector_store = initialize_vector_store(existing_files)
+    st.sidebar.markdown("---")
+    # DISCLAIMER KNOP
+    if st.sidebar.button("Algemene Voorwaarden"):
+        st.session_state.show_disclaimer = not st.session_state.show_disclaimer
+
+    if st.session_state.show_disclaimer:
+        st.sidebar.info("""
+        **Gebruiksvoorwaarden & Disclaimer: OER-Chatbot (COG)**
+        
+        Welkom bij de chatbot van de Commissie Onderwijsbegeleiding (COG). Deze AI-assistent is ontworpen om je snel wegwijs te maken in de Onderwijs- en Examenregeling (OER). 
+        
+        Door gebruik te maken van deze chatbot, ga je akkoord met de volgende voorwaarden:
+        
+        - **Geen beslissingsbevoegdheid:** Deze chatbot is uitsluitend bedoeld als een informatief hulpmiddel. De AI is niet bevoegd om toestemming te geven voor uitzonderingen of afwijkende studietrajecten. Volg altijd de formele route via de examencommissie of studieadviseur.
+        - **Geen juridische status:** Aan de antwoorden kunnen geen rechten worden ontleend. Bij tegenstrijdigheid is de officiële OER-tekst altijd leidend.
+        - **Controleer de bron:** Hoewel de AI met zorg is geprogrammeerd, kan de technologie fouten maken. Controleer belangrijke informatie altijd bij de officiële documentatie.
+        - **Privacy & Gegevens:** Deel geen gevoelige persoonlijke gegevens (medische info of BSN) in het gesprek.
+        - **Correct gebruik:** Het is niet toegestaan de chatbot te gebruiken voor oneigenlijke doeleinden.
+        
+        Heb je een specifieke vraag over jouw persoonlijke situatie? Neem dan direct contact op met de COG of je studieadviseur.
+        """)
+
+# PDF Auto-load
+if st.session_state.vector_store is None and os.path.exists("uploads/pdf_name.txt"):
+    with open("uploads/pdf_name.txt", "r") as f: name = f.read().strip()
+    path = os.path.join("uploads", name)
+    if os.path.exists(path): st.session_state.vector_store = initialize_vector_store(path)
