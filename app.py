@@ -20,10 +20,13 @@ def apply_custom_css():
             color: #1f1f1f !important;
         }}
         [data-testid="stSidebar"] {{ background-color: #f0f2f6 !important; }}
-        p, h1, h2, h3, h4, span, label, .stMarkdown {{
-            color: #1f1f1f !important;
-            font-family: 'Nunito', sans-serif !important;
-        }}
+        p, h1, h2, h3, h4, label, .stMarkdown {{
+    color: #1f1f1f !important;
+    font-family: 'Nunito', sans-serif !important;
+}}
+                span:not(.material-icons):not([data-testid="stIcon"]) {{
+    font-family: 'Nunito', sans-serif !important;
+}}
         @media (max-width: 640px) {{
             [data-testid="column"] {{ width: 100% !important; flex: 1 1 100% !important; min-width: 100% !important; }}
         }}
