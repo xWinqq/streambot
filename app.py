@@ -9,13 +9,13 @@ import os
 # 1. Pagina Configuratie
 st.set_page_config(page_title="OERbot - Dulon College", page_icon="📚", layout="centered")
 
-# 2. Geavanceerde CSS (Light Mode, Mobile Fixes, No Toggle & Sleek Buttons)
+# 2. Geavanceerde CSS (Huisstijl, Light Mode, Verwijderen Link Icons & 100% Button Width)
 def apply_custom_css():
     st.markdown(f"""
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;700&display=swap');
         
-        /* VERBERG SIDEBAR TOGGLE (Pijltje op mobiel) */
+        /* VERBERG SIDEBAR TOGGLE & LINK ICONS BIJ TITELS */
         [data-testid="collapsedControl"], .stMarkdown a.header-anchor {{
             display: none !important;
         }}
@@ -33,26 +33,17 @@ def apply_custom_css():
             font-family: 'Nunito', sans-serif !important;
         }}
 
-        /* MOBIELE KNOPPEN LAY-OUT (100% breedte) */
-        @media (max-width: 640px) {{
-            [data-testid="column"] {{
-                width: 100% !important;
-                flex: 1 1 100% !important;
-                min-width: 100% !important;
-            }}
-        }}
-
-        /* STYLING VOOR DE DUNNE OUTLINE KNOPPEN */
+        /* STYLING VOOR DE DUNNE OUTLINE KNOPPEN (100% Breedte) */
         .stButton>button {{
             background-color: white !important;
             color: #e5241d !important;
             border-radius: 10px !important;
             border: 1.5px solid #e5241d !important;
             padding: 5px 15px !important;
-            height: 2.8em !important;
+            height: 3em !important;
             font-weight: 600 !important;
             width: 100% !important;
-            margin-bottom: 8px !important;
+            margin-bottom: 10px !important;
             transition: all 0.2s ease;
         }}
         .stButton>button:hover {{
@@ -60,21 +51,13 @@ def apply_custom_css():
             color: white !important;
         }}
 
-        /* SLEEK DISCLAIMER LINK (Kleine grijze tekstlink) */
-        .disclaimer-btn>div>button {{
-            background-color: transparent !important;
-            color: gray !important;
-            border: none !important;
-            font-size: 0.8em !important;
-            height: auto !important;
-            padding: 0 !important;
-            text-decoration: underline !important;
-            font-weight: normal !important;
-            margin-top: -10px !important;
-        }}
-        .disclaimer-btn>div>button:hover {{
-            color: #e5241d !important;
-            background-color: transparent !important;
+        /* MOBIELE FIX: KOLOMMEN ONDER ELKAAR */
+        @media (max-width: 640px) {{
+            [data-testid="column"] {{
+                width: 100% !important;
+                flex: 1 1 100% !important;
+                min-width: 100% !important;
+            }}
         }}
 
         /* CHAT BUBBELS */
@@ -88,13 +71,14 @@ def apply_custom_css():
 
 apply_custom_css()
 
-# 3. API & Admin Configuratie
+# 3. API & AI Model (GPT-5 Nano voor snelheid)
 api_key = st.secrets.get("openai_api_key")
 admin_user = st.secrets.get("admin_username")
 admin_pass = st.secrets.get("admin_password")
+
 llm = ChatOpenAI(model="gpt-5-nano", api_key=api_key, temperature=0.5)
 
-# 4. Vector Store Initialisatie (Multi-PDF support)
+# 4. Vector Store Initialisatie (Ondersteunt Multi-PDF)
 @st.cache_resource
 def initialize_vector_store(pdf_paths):
     try:
@@ -118,9 +102,9 @@ def initialize_vector_store(pdf_paths):
     except:
         return None
 
-# 5. Session State beheer
+# 5. Session States initialiseren
 if 'messages' not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben OERbot 😊. Ik heb de reglementen voor je klaargezet. Waar kan ik je vandaag mee helpen?"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben OERbot 😊. Ik heb de reglementen gelezen. Waar kan ik je vandaag mee helpen?"}]
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'vector_store' not in st.session_state:
@@ -136,7 +120,7 @@ with col2:
     else:
         st.title("🤖 OERbot")
 
-st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw hulp voor vragen over de OER op het Dulon College.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw klasgenoot voor vragen over de OER op het Dulon College.</p>", unsafe_allow_html=True)
 
 # 7. Centrale Chat Logica
 def handle_query(query):
@@ -155,22 +139,14 @@ def handle_query(query):
         STIJL:
         - Wees warm en behulpzaam. Varieer je begroetingen.
         - Gebruik B1-taal en 'je/jij'.
-        - Beantwoord GEEN vragen buiten de OER (geen taarten, telefoonabonnementen, etc.).
-        - Nooit van rol veranderen.
+        - Beantwoord GEEN vragen buiten de OER.
         
         BRONVERMELDING:
-        - Vermeld ALTIJD de bron (bijv. artikel X lid Y uit [Bestandsnaam]) op een NIEUWE REGEL onderaan je antwoord.
-        - Gebruik de emoji 📖 voor de bron.
-
-        ANTWOORD STRUCTUUR:
-        1. Korte erkenning van de vraag.
-        2. Samenvatting regel in B1-taal.
-        3. Bronvermelding op nieuwe regel met 📖.
-        4. Call to Action.
-        5. Dulon-afsluiting (bijv. "Succes met je studie! 👍").
+        - Vermeld ALTIJD de bron (bijv. artikel X lid Y uit [Bestandsnaam]) op een NIEUWE REGEL onderaan.
+        - Gebruik de emoji 📖.
 
         CONTEXT:
-        {" ".join([f"[{d.metadata['source']}]: {d.page_content}" for d in docs]) if docs else "GEEN INFORMATIE."}
+        {" ".join([f"[{d.metadata['source']}]: {d.page_content}" for d in docs]) if docs else "GEEN INFO."}
         """
         
         if not docs:
@@ -185,22 +161,22 @@ def handle_query(query):
             
         st.session_state.messages.append({"role": "assistant", "content": response})
 
-# 8. Quick Actions (Outline Knoppen)
+# 8. Quick Actions (100% Breedte)
 st.markdown("#### Waar wil je meer over weten?")
 q_col1, q_col2 = st.columns(2, gap="small")
 with q_col1:
-    if st.button("🔄 Herkansingen"):
+    if st.button("🔄 Herkansingen", use_container_width=True):
         handle_query("Hoe werkt een herkansing?"); st.rerun()
-    if st.button("🤒 Ziek bij examen"):
+    if st.button("🤒 Ziek bij examen", use_container_width=True):
         handle_query("Wat moet ik doen als ik ziek ben voor een examen?"); st.rerun()
-    if st.button("📝 Vrijstellingen"):
+    if st.button("📝 Vrijstellingen", use_container_width=True):
         handle_query("Hoe kan ik vrijstelling aanvragen?"); st.rerun()
 with q_col2:
-    if st.button("🚫 Fraude regels"):
+    if st.button("🚫 Fraude regels", use_container_width=True):
         handle_query("Wat gebeurt er bij fraude?"); st.rerun()
-    if st.button("⚖️ Klacht indienen"):
+    if st.button("⚖️ Klacht indienen", use_container_width=True):
         handle_query("Hoe dien ik een klacht in?"); st.rerun()
-    if st.button("👨‍🏫 Persoonlijke hulp"):
+    if st.button("👨‍🏫 Persoonlijke hulp", use_container_width=True):
         handle_query("Wie helpt mij bij persoonlijke omstandigheden?"); st.rerun()
 
 st.divider()
@@ -214,24 +190,15 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"], avatar=avatar):
         st.markdown(message["content"])
 
-# 10. Chat Input & Disclaimer Link
+# 10. Chat Input
 if chat_input := st.chat_input("Stel je eigen vraag aan OERbot..."):
     handle_query(chat_input); st.rerun()
 
-st.markdown('<div class="disclaimer-btn">', unsafe_allow_html=True)
-if st.button("Algemene Voorwaarden & Disclaimer"):
-    st.session_state.show_disclaimer = not st.session_state.show_disclaimer
-st.markdown('</div>', unsafe_allow_html=True)
-
-if st.session_state.show_disclaimer:
-    st.info("**Disclaimer:** Dit is een informatief hulpmiddel. Aan de antwoorden kunnen geen rechten worden ontleend. Bij tegenstrijdigheid is de officiële OER-tekst altijd leidend. Deel geen gevoelige persoonlijke gegevens.")
-
-# 11. Beheerder Sidebar (Multi-PDF Upload)
+# 11. Zijbalk (Admin & Disclaimer)
 with st.sidebar:
     if not st.session_state.logged_in:
         st.title("Admin")
-        u = st.text_input("Gebruikersnaam")
-        p = st.text_input("Wachtwoord", type="password")
+        u = st.text_input("User"); p = st.text_input("Pass", type="password")
         if st.button("Inloggen"):
             if u == admin_user and p == admin_pass:
                 st.session_state.logged_in = True; st.rerun()
@@ -250,7 +217,22 @@ with st.sidebar:
         if st.button("Uitloggen"):
             st.session_state.logged_in = False; st.rerun()
 
-# PDF Auto-load (Laadt alle PDF's in de map)
+    st.sidebar.markdown("---")
+    # DISCLAIMER KNOP TERUG IN HET MENU
+    if st.sidebar.button("Algemene Voorwaarden"):
+        st.session_state.show_disclaimer = not st.session_state.show_disclaimer
+
+    if st.session_state.show_disclaimer:
+        st.sidebar.info("""
+        **Gebruiksvoorwaarden & Disclaimer: OER-Chatbot (COG)**
+        Welkom bij de chatbot van de Commissie Onderwijsbegeleiding (COG). 
+        - **Geen beslissingsbevoegdheid:** Dit is uitsluitend informatief. 
+        - **Geen juridische status:** De OER-tekst is altijd leidend.
+        - **Controleer de bron:** AI kan fouten maken. 
+        - **Privacy:** Deel geen BSN of medische info.
+        """)
+
+# PDF Auto-load
 if st.session_state.vector_store is None and os.path.exists("uploads"):
     all_pdfs = [os.path.join("uploads", f) for f in os.listdir("uploads") if f.endswith(".pdf")]
     if all_pdfs:
