@@ -13,6 +13,11 @@ st.set_page_config(page_title="OERbot - Dulon College", page_icon="📚", layout
 def apply_custom_css():
     st.markdown(f"""
         <style>
+                [data-testid="stSidebarCollapsedControl"], 
+[data-testid="collapsedControl"], 
+.st-emotion-cache-6qob1r {{
+    display: none !important;
+}}
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;700&display=swap');
         [data-testid="collapsedControl"] {{ display: none; }}
         [data-testid="stAppViewContainer"], .main, [data-testid="stHeader"] {{
