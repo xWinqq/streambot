@@ -59,9 +59,9 @@ admin_user = st.secrets.get("admin_username")
 admin_pass = st.secrets.get("admin_password")
 llm = ChatOpenAI(model="gpt-5-nano", api_key=api_key, temperature=0.5)
 
-# 4. AANPASSING 1: Vector Store Initialisatie voor meerdere bestanden
+# 4. Vector Store Initialisatie voor meerdere bestanden
 @st.cache_resource
-def initialize_vector_store(pdf_paths): # Nu een lijst met paden
+def initialize_vector_store(pdf_paths):
     try:
         embeddings = OpenAIEmbeddings(api_key=api_key)
         all_documents = []
@@ -72,13 +72,11 @@ def initialize_vector_store(pdf_paths): # Nu een lijst met paden
             for page in doc:
                 text = page.get_text().strip()
                 if text:
-                    # Voeg bron-informatie toe aan metadata voor betere citatie
                     all_documents.append(Document(
                         page_content=text, 
                         metadata={"page": page.number + 1, "source": file_name}
                     ))
         
-        # Maak één vectorstore van alle documenten samen
         return Chroma.from_documents(
             all_documents, 
             embeddings, 
@@ -105,7 +103,7 @@ with col2:
     else: st.title("🤖 OERbot")
 st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw hulp voor vragen over de OER op het Dulon College.</p>", unsafe_allow_html=True)
 
-# 7. Centrale Chat Logica (Verbeterd voor Multi-PDF context)
+# 7. Centrale Chat Logica (Strikt gefilterd op OER-onderwerpen)
 def handle_query(query):
     st.session_state.messages.append({"role": "user", "content": query})
     if st.session_state.vector_store is None:
@@ -115,15 +113,24 @@ def handle_query(query):
         docs = [r[0] for r in results if r[1] < 0.6]
 
         if not docs:
-            response = "Ik kan dit niet direct in de reglementen vinden. 😊"
+            # Directe weigering als de vector search geen relevante OER-onderwerpen vindt
+            response = "Ik kan je hier helaas alleen helpen met informatie uit de OER. Deze vraag staat niet in de OER, dus kan ik je hier niets over zeggen. Als klasgenoot zou ik je wel aanraden om dit even te bespreken met je coach of opleiding. 😊"
         else:
-            # Context opbouwen met vermelding van welk bestand de info komt
             context_text = "\n\n".join([f"Bron [{d.metadata['source']}]: {d.page_content}" for d in docs])
             
             system_prompt = f"""
-            Jij bent OERbot, een vriendelijke klasgenoot. Gebruik de info uit de geüploade OER-documenten.
-            Varieer je begroetingen en gebruik B1-taal. 
-            Vermeld ALTIJD de bron (artikel en bestandsnaam) op een NIEUWE REGEL met 📖.
+            Jij bent OERbot, een vriendelijke klasgenoot op het Dulon College.
+            
+            STRIKTE OPDRACHT:
+            - Je bent een afgesloten systeem. Je mag UITSLUITEND antwoorden geven op basis van de verstrekte OER-documenten.
+            - Als een vraag NIET over de OER gaat (bijvoorbeeld: vragen over taarten bakken, recepten, sport, algemene kennis, programmeren), dan MOET je het antwoord weigeren.
+            - Zeg in dat geval: "Ik kan je hier helaas alleen helpen met informatie uit de OER. Deze vraag staat niet in de OER, dus kan ik je hier niets over zeggen. 😊"
+            - Gebruik NOOIT je eigen algemene kennis om vragen te beantwoorden die buiten de context vallen.
+            
+            STIJL:
+            - Varieer je begroetingen en gebruik B1-taal. 
+            - Vermeld ALTIJD de bron (artikel en bestandsnaam) op een NIEUWE REGEL met 📖.
+            
             CONTEXT: {context_text}
             """
             chat_template = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", "{question}")])
@@ -154,7 +161,7 @@ for message in st.session_state.messages:
 if chat_input := st.chat_input("Stel je vraag aan OERbot..."):
     handle_query(chat_input); st.rerun()
 
-# 11. AANPASSING 2: Zijbalk Admin voor Multi-upload
+# 11. Zijbalk Admin voor Multi-upload
 with st.sidebar:
     if not st.session_state.logged_in:
         st.title("Admin")
@@ -163,7 +170,6 @@ with st.sidebar:
             if u == admin_user and p == admin_pass: st.session_state.logged_in = True; st.rerun()
     else:
         st.title("Beheer")
-        # Accept_multiple_files op True zetten
         uploaded_files = st.file_uploader("Upload OER PDF's", type="pdf", accept_multiple_files=True)
         if uploaded_files:
             os.makedirs("uploads", exist_ok=True)
@@ -181,7 +187,7 @@ with st.sidebar:
     if st.sidebar.button("Algemene Voorwaarden"): st.session_state.show_disclaimer = not st.session_state.show_disclaimer
     if st.session_state.show_disclaimer: st.sidebar.info("Disclaimer: Aan antwoorden kunnen geen rechten worden ontleend.")
 
-# AANPASSING 3: PDF Auto-load voor alle bestanden in de map
+# PDF Auto-load voor alle bestanden in de map
 if st.session_state.vector_store is None and os.path.exists("uploads"):
     all_pdfs = [os.path.join("uploads", f) for f in os.listdir("uploads") if f.endswith(".pdf")]
     if all_pdfs:
