@@ -6,32 +6,37 @@ from langchain_core.prompts import ChatPromptTemplate
 import fitz
 import os
 
-# 1. Pagina Configuratie
-st.set_page_config(page_title="OERbot - Dulon College", page_icon="📚", layout="centered")
+# 1. Pagina Configuratie - Nu ingesteld op 'collapsed' bij opstarten
+st.set_page_config(
+    page_title="OERbot - Dulon College", 
+    page_icon="📚", 
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
 
 # 2. Geavanceerde CSS (Huisstijl & Light Mode behouden)
 def apply_custom_css():
     st.markdown(f"""
         <style>
-                [data-testid="stSidebarCollapsedControl"], 
-[data-testid="collapsedControl"], 
-.st-emotion-cache-6qob1r {{
-    display: none !important;
-}}
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;700&display=swap');
-        [data-testid="collapsedControl"] {{ display: none; }}
+        
         [data-testid="stAppViewContainer"], .main, [data-testid="stHeader"] {{
             background-color: white !important;
             color: #1f1f1f !important;
         }}
         [data-testid="stSidebar"] {{ background-color: #f0f2f6 !important; }}
+        
+        /* Zorg dat tekst Nunito gebruikt, maar sluit iconen uit zodat ze laden */
         p, h1, h2, h3, h4, label, .stMarkdown {{
-    color: #1f1f1f !important;
-    font-family: 'Nunito', sans-serif !important;
-}}
-                span:not(.material-icons):not([data-testid="stIcon"]) {{
-    font-family: 'Nunito', sans-serif !important;
-}}
+            color: #1f1f1f !important;
+            font-family: 'Nunito', sans-serif !important;
+        }}
+        
+        /* Voorkom dat Nunito de systeem-iconen van Streamlit overschrijft */
+        span:not(.material-icons):not([data-testid="stIcon"]):not([class*="st-"]) {{
+            font-family: 'Nunito', sans-serif !important;
+        }}
+        
         @media (max-width: 640px) {{
             [data-testid="column"] {{ width: 100% !important; flex: 1 1 100% !important; min-width: 100% !important; }}
         }}
@@ -124,7 +129,6 @@ def handle_query(query):
     if st.session_state.vector_store is None:
         st.session_state.messages.append({"role": "assistant", "content": "Ik help je graag, maar ik heb nog geen documenten kunnen inladen. 👍"})
     else:
-        # Hier wordt de spinner getoond terwijl de API laadt
         with st.spinner("OERbot is even aan het zoeken in de documenten... 📚"):
             results = st.session_state.vector_store.similarity_search_with_score(query, k=4)
             docs = [r[0] for r in results if r[1] < 0.6]
@@ -150,7 +154,6 @@ def handle_query(query):
                 chat_template = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", "{question}")])
                 formatted = chat_template.format_messages(question=query)
                 
-                # Stream de response
                 full_response = "".join([chunk.content for chunk in llm.stream(formatted)])
                 response = full_response
             
