@@ -53,28 +53,21 @@ def apply_custom_css():
 
 apply_custom_css()
 
-# 3. API & AI Model (GPT-5 Nano voor snelheid en efficiëntie)
+# 3. API & AI Model
 api_key = st.secrets.get("openai_api_key")
 admin_user = st.secrets.get("admin_username")
 admin_pass = st.secrets.get("admin_password")
 llm = ChatOpenAI(model="gpt-5-nano", api_key=api_key, temperature=0.5)
 
-# 4. Vector Store Initialisatie (Verbeterd voor persistentie)
+# 4. Vector Store Initialisatie
 @st.cache_resource
-def initialize_vector_store(pdf_paths=None):
-    persist_dir = os.path.join(os.getcwd(), "chroma_db", "shared_pdf")
-    embeddings = OpenAIEmbeddings(api_key=api_key)
-    
+def initialize_vector_store(pdf_paths):
     try:
-        # Als er geen nieuwe paden zijn, probeer de bestaande database te laden
-        if not pdf_paths:
-            if os.path.exists(persist_dir) and os.listdir(persist_dir):
-                return Chroma(persist_directory=persist_dir, embedding_function=embeddings)
-            return None
-
-        # Als er wel paden zijn, verwerk de documenten
+        embeddings = OpenAIEmbeddings(api_key=api_key)
         all_documents = []
+        
         for path in pdf_paths:
+            if not os.path.exists(path): continue
             doc = fitz.open(path)
             file_name = os.path.basename(path)
             for page in doc:
@@ -85,13 +78,14 @@ def initialize_vector_store(pdf_paths=None):
                         metadata={"page": page.number + 1, "source": file_name}
                     ))
         
-        # Sla op naar schijf
-        vector_db = Chroma.from_documents(
+        if not all_documents:
+            return None
+
+        return Chroma.from_documents(
             all_documents, 
             embeddings, 
-            persist_directory=persist_dir
+            persist_directory=os.path.join(os.getcwd(), "chroma_db", "shared_pdf")
         )
-        return vector_db
     except Exception as e:
         st.error(f"Fout bij verwerken documenten: {e}")
         return None
@@ -101,11 +95,21 @@ if 'messages' not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben OERbot 😊. Ik heb alle reglementen doorgelezen. Waar kan ik je vandaag mee helpen?"}]
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
-if 'vector_store' not in st.session_state:
-    # Automatisch de database laden bij opstarten
-    st.session_state.vector_store = initialize_vector_store()
 if 'show_disclaimer' not in st.session_state:
     st.session_state.show_disclaimer = False
+
+# --- AUTO-LOAD LOGIC ---
+# Dit zorgt ervoor dat de bot bestanden uit de 'uploads' map nooit vergeet.
+if 'vector_store' not in st.session_state:
+    upload_dir = "uploads"
+    if os.path.exists(upload_dir):
+        all_pdfs = [os.path.join(upload_dir, f) for f in os.listdir(upload_dir) if f.endswith(".pdf")]
+        if all_pdfs:
+            st.session_state.vector_store = initialize_vector_store(all_pdfs)
+        else:
+            st.session_state.vector_store = None
+    else:
+        st.session_state.vector_store = None
 
 # 6. Branding
 col1, col2, col3 = st.columns([1,3,1])
@@ -133,12 +137,11 @@ def handle_query(query):
             
             STRIKTE OPDRACHT:
             - Je bent een afgesloten systeem. Je mag UITSLUITEND antwoorden geven op basis van de verstrekte OER-documenten.
-            - Als een vraag NIET over de OER gaat, dan MOET je het antwoord weigeren.
-            - Zeg in dat geval: "Ik kan je hier helaas alleen helpen met informatie uit de OER. Deze vraag staat niet in de OER, dus kan ik je hier niets over zeggen. 😊"
+            - Als een vraag NIET over de OER gaat, weiger dan beleefd.
             
             STIJL:
             - Varieer je begroetingen en gebruik B1-taal. 
-            - Vermeld ALTIJD de bron (artikel en bestandsnaam) op een NIEUWE REGEL met 📖.
+            - Vermeld ALTIJD de bron op een NIEUWE REGEL met 📖.
             
             CONTEXT: {context_text}
             """
@@ -170,7 +173,7 @@ for message in st.session_state.messages:
 if chat_input := st.chat_input("Stel je vraag aan OERbot..."):
     handle_query(chat_input); st.rerun()
 
-# 11. Zijbalk Admin voor Multi-upload
+# 11. Zijbalk Admin
 with st.sidebar:
     if not st.session_state.logged_in:
         st.title("Admin")
@@ -189,7 +192,7 @@ with st.sidebar:
                 saved_paths.append(pdf_path)
             
             st.session_state.vector_store = initialize_vector_store(saved_paths)
-            st.success(f"{len(uploaded_files)} bestanden succesvol verwerkt!")
+            st.success("Bestanden verwerkt!")
         if st.button("Uitloggen"): st.session_state.logged_in = False; st.rerun()
 
     st.sidebar.markdown("---")
