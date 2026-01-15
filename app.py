@@ -98,8 +98,7 @@ if 'logged_in' not in st.session_state:
 if 'show_disclaimer' not in st.session_state:
     st.session_state.show_disclaimer = False
 
-# --- AUTO-LOAD LOGIC ---
-# Dit zorgt ervoor dat de bot bestanden uit de 'uploads' map nooit vergeet.
+# AUTO-LOAD LOGIC (GitHub Persistence)
 if 'vector_store' not in st.session_state:
     upload_dir = "uploads"
     if os.path.exists(upload_dir):
@@ -118,38 +117,44 @@ with col2:
     else: st.title("🤖 OERbot")
 st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw hulp voor vragen over de OER op het Dulon College.</p>", unsafe_allow_html=True)
 
-# 7. Centrale Chat Logica
+# 7. Centrale Chat Logica (With Loading Feedback)
 def handle_query(query):
     st.session_state.messages.append({"role": "user", "content": query})
+    
     if st.session_state.vector_store is None:
         st.session_state.messages.append({"role": "assistant", "content": "Ik help je graag, maar ik heb nog geen documenten kunnen inladen. 👍"})
     else:
-        results = st.session_state.vector_store.similarity_search_with_score(query, k=4)
-        docs = [r[0] for r in results if r[1] < 0.6]
+        # Hier wordt de spinner getoond terwijl de API laadt
+        with st.spinner("OERbot is even aan het zoeken in de documenten... 📚"):
+            results = st.session_state.vector_store.similarity_search_with_score(query, k=4)
+            docs = [r[0] for r in results if r[1] < 0.6]
 
-        if not docs:
-            response = "Ik kan je hier helaas alleen helpen met informatie uit de OER. Deze vraag staat niet in de OER, dus kan ik je hier niets over zeggen. Als klasgenoot zou ik je wel aanraden om dit even te bespreken met je coach of opleiding. 😊"
-        else:
-            context_text = "\n\n".join([f"Bron [{d.metadata['source']}]: {d.page_content}" for d in docs])
+            if not docs:
+                response = "Ik kan je hier helaas alleen helpen met informatie uit de OER. Deze vraag staat niet in de OER, dus kan ik je hier niets over zeggen. Als klasgenoot zou ik je wel aanraden om dit even te bespreken met je coach of opleiding. 😊"
+            else:
+                context_text = "\n\n".join([f"Bron [{d.metadata['source']}]: {d.page_content}" for d in docs])
+                
+                system_prompt = f"""
+                Jij bent OERbot, een vriendelijke klasgenoot op het Dulon College.
+                
+                STRIKTE OPDRACHT:
+                - Je bent een afgesloten systeem. Je mag UITSLUITEND antwoorden geven op basis van de verstrekte OER-documenten.
+                - Als een vraag NIET over de OER gaat, weiger dan beleefd.
+                
+                STIJL:
+                - Varieer je begroetingen en gebruik B1-taal. 
+                - Vermeld ALTIJD de bron op een NIEUWE REGEL met 📖.
+                
+                CONTEXT: {context_text}
+                """
+                chat_template = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", "{question}")])
+                formatted = chat_template.format_messages(question=query)
+                
+                # Stream de response
+                full_response = "".join([chunk.content for chunk in llm.stream(formatted)])
+                response = full_response
             
-            system_prompt = f"""
-            Jij bent OERbot, een vriendelijke klasgenoot op het Dulon College.
-            
-            STRIKTE OPDRACHT:
-            - Je bent een afgesloten systeem. Je mag UITSLUITEND antwoorden geven op basis van de verstrekte OER-documenten.
-            - Als een vraag NIET over de OER gaat, weiger dan beleefd.
-            
-            STIJL:
-            - Varieer je begroetingen en gebruik B1-taal. 
-            - Vermeld ALTIJD de bron op een NIEUWE REGEL met 📖.
-            
-            CONTEXT: {context_text}
-            """
-            chat_template = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", "{question}")])
-            formatted = chat_template.format_messages(question=query)
-            full_response = "".join([chunk.content for chunk in llm.stream(formatted)])
-            response = full_response
-        st.session_state.messages.append({"role": "assistant", "content": response})
+            st.session_state.messages.append({"role": "assistant", "content": response})
 
 # 8. Quick Actions
 st.markdown("#### Waar wil je meer over weten?")
