@@ -97,7 +97,7 @@ def initialize_vector_store(pdf_paths):
 
 # 5. Session State beheer
 if 'messages' not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben OERbot 😊. Ik heb alle reglementen doorgelezen. Waar kan ik je vandaag mee helpen?"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben de examenbot 😊. Ik heb alle reglementen doorgelezen. Waar kan ik je vandaag mee helpen?"}]
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'show_disclaimer' not in st.session_state:
@@ -120,7 +120,7 @@ col1, col2, col3 = st.columns([1,3,1])
 with col2:
     if os.path.exists("logo.png"): st.image("logo.png", use_container_width=True)
     else: st.title("🤖 OERbot")
-st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw hulp voor vragen over de OER op het Dulon College.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw hulp voor vragen over de onderwijs- en examenreglementen op het Dulon College.</p>", unsafe_allow_html=True)
 
 # 7. Centrale Chat Logica (With Loading Feedback)
 def handle_query(query):
