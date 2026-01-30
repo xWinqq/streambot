@@ -95,26 +95,21 @@ def initialize_vector_store(pdf_paths):
         st.error(f"Fout bij verwerken documenten: {e}")
         return None
 
-# --- 5. INITIALISATIE & SESSION STATE (VERBETERD) ---
+# 5. Session State beheer
 if 'messages' not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben de examenbot 😊. Ik heb de reglementen gelezen. Waar kan ik je mee helpen?"}]
-
+    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben de examenbot 😊. Ik heb alle reglementen doorgelezen. Waar kan ik je vandaag mee helpen?"}]
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
+if 'show_disclaimer' not in st.session_state:
+    st.session_state.show_disclaimer = False
 
-# We controleren nu ook of de waarde None is, zodat hij blijft proberen te laden
-if 'vector_store' not in st.session_state or st.session_state.vector_store is None:
-    upload_dir = os.path.join(os.getcwd(), "uploads") # Gebruik absoluut pad voor stabiliteit
-    if not os.path.exists(upload_dir):
-        os.makedirs(upload_dir)
-        
-    existing_pdfs = [os.path.join(upload_dir, f) for f in os.listdir(upload_dir) if f.endswith(".pdf")]
-    
-    if existing_pdfs:
-        # We laden de store in de sessie
-        new_store = initialize_vector_store(existing_pdfs)
-        if new_store:
-            st.session_state.vector_store = new_store
+# AUTO-LOAD LOGIC (GitHub Persistence)
+if 'vector_store' not in st.session_state:
+    upload_dir = "uploads"
+    if os.path.exists(upload_dir):
+        all_pdfs = [os.path.join(upload_dir, f) for f in os.listdir(upload_dir) if f.endswith(".pdf")]
+        if all_pdfs:
+            st.session_state.vector_store = initialize_vector_store(all_pdfs)
         else:
             st.session_state.vector_store = None
     else:
