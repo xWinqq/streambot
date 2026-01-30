@@ -3,10 +3,10 @@ from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import Chroma
 from langchain_core.prompts import ChatPromptTemplate
-import fitz
+import fitz  # PyMuPDF
 import os
 
-# 1. Pagina Configuratie - Nu ingesteld op 'collapsed' bij opstarten
+# --- 1. CONFIGURATIE ---
 st.set_page_config(
     page_title="OERbot - Dulon College", 
     page_icon="📚", 
@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 2. Geavanceerde CSS (Huisstijl & Light Mode behouden)
+# --- 2. CSS STYLING ---
 def apply_custom_css():
     st.markdown(f"""
         <style>
@@ -26,29 +26,18 @@ def apply_custom_css():
         }}
         [data-testid="stSidebar"] {{ background-color: #f0f2f6 !important; }}
         
-        /* Zorg dat tekst Nunito gebruikt, maar sluit iconen uit zodat ze laden */
         p, h1, h2, h3, h4, label, .stMarkdown {{
             color: #1f1f1f !important;
             font-family: 'Nunito', sans-serif !important;
         }}
         
-        /* Voorkom dat Nunito de systeem-iconen van Streamlit overschrijft */
-        span:not(.material-icons):not([data-testid="stIcon"]):not([class*="st-"]) {{
-            font-family: 'Nunito', sans-serif !important;
-        }}
-        
-        @media (max-width: 640px) {{
-            [data-testid="column"] {{ width: 100% !important; flex: 1 1 100% !important; min-width: 100% !important; }}
-        }}
         .stButton>button {{
             background-color: white !important;
             color: #e5241d !important;
             border-radius: 10px !important;
             border: 1.5px solid #e5241d !important;
             padding: 5px 15px !important;
-            height: 2.8em !important;
             font-weight: 600 !important;
-            margin-bottom: 8px !important;
             width: 100% !important;
         }}
         .stButton>button:hover {{ background-color: #e5241d !important; color: white !important; }}
@@ -58,99 +47,117 @@ def apply_custom_css():
 
 apply_custom_css()
 
-# 3. API & AI Model
+# --- 3. API SETUP ---
 api_key = st.secrets.get("openai_api_key")
 admin_user = st.secrets.get("admin_username")
 admin_pass = st.secrets.get("admin_password")
-llm = ChatOpenAI(model="gpt-5-nano", api_key=api_key, temperature=0.5)
 
-# 4. Vector Store Initialisatie
-@st.cache_resource
+if not api_key:
+    st.error("Geen OpenAI API key gevonden in secrets!")
+    st.stop()
+
+llm = ChatOpenAI(model="gpt-4o-mini", api_key=api_key, temperature=0.5)
+
+# --- 4. VECTOR STORE LOGICA ---
+@st.cache_resource(show_spinner=False)
 def initialize_vector_store(pdf_paths):
+    """Leest PDF's in en maakt de zoekmachine aan."""
     try:
         embeddings = OpenAIEmbeddings(api_key=api_key)
         all_documents = []
         
         for path in pdf_paths:
             if not os.path.exists(path): continue
+            
             doc = fitz.open(path)
             file_name = os.path.basename(path)
+            file_has_text = False
+            
             for page in doc:
                 text = page.get_text().strip()
                 if text:
+                    file_has_text = True
                     all_documents.append(Document(
                         page_content=text, 
                         metadata={"page": page.number + 1, "source": file_name}
                     ))
-        
+            
+            # Check of het bestand misschien een scan is (geen tekst gevonden)
+            if not file_has_text:
+                print(f"⚠️ WAARSCHUWING: Bestand '{file_name}' bevat geen leesbare tekst (mogelijk een scan).")
+
         if not all_documents:
             return None
 
+        # Chroma DB aanmaken
+        persist_dir = os.path.join(os.getcwd(), "chroma_db")
         return Chroma.from_documents(
             all_documents, 
             embeddings, 
-            persist_directory=os.path.join(os.getcwd(), "chroma_db", "shared_pdf")
+            persist_directory=persist_dir
         )
     except Exception as e:
-        st.error(f"Fout bij verwerken documenten: {e}")
+        st.error(f"Critical error in vector store: {e}")
         return None
 
-# 5. Session State beheer
+# --- 5. INITIALISATIE & SESSION STATE ---
 if 'messages' not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben de examenbot 😊. Ik heb alle reglementen doorgelezen. Waar kan ik je vandaag mee helpen?"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hoi! Ik ben de examenbot 😊. Ik heb de reglementen gelezen. Waar kan ik je mee helpen?"}]
+
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
-if 'show_disclaimer' not in st.session_state:
-    st.session_state.show_disclaimer = False
 
-# AUTO-LOAD LOGIC (GitHub Persistence)
+# Auto-load logic: Check direct de map 'uploads' bij opstarten
 if 'vector_store' not in st.session_state:
     upload_dir = "uploads"
-    if os.path.exists(upload_dir):
-        all_pdfs = [os.path.join(upload_dir, f) for f in os.listdir(upload_dir) if f.endswith(".pdf")]
-        if all_pdfs:
-            st.session_state.vector_store = initialize_vector_store(all_pdfs)
-        else:
-            st.session_state.vector_store = None
+    if not os.path.exists(upload_dir):
+        os.makedirs(upload_dir)
+        
+    existing_pdfs = [os.path.join(upload_dir, f) for f in os.listdir(upload_dir) if f.endswith(".pdf")]
+    
+    if existing_pdfs:
+        with st.spinner("Kennisbank laden..."):
+            st.session_state.vector_store = initialize_vector_store(existing_pdfs)
     else:
         st.session_state.vector_store = None
 
-# 6. Branding
+# --- 6. USER INTERFACE (MAIN) ---
 col1, col2, col3 = st.columns([1,3,1])
 with col2:
     if os.path.exists("logo.png"): st.image("logo.png", use_container_width=True)
     else: st.title("🤖 OERbot")
-st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw hulp voor vragen over de onderwijs- en examenreglementen op het Dulon College.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw hulp voor vragen over de onderwijs- en examenreglementen.</p>", unsafe_allow_html=True)
 
-# 7. Centrale Chat Logica (With Loading Feedback)
+# --- 7. CHAT LOGICA ---
 def handle_query(query):
     st.session_state.messages.append({"role": "user", "content": query})
     
     if st.session_state.vector_store is None:
-        st.session_state.messages.append({"role": "assistant", "content": "Ik help je graag, maar ik heb nog geen documenten kunnen inladen. 👍"})
+        st.session_state.messages.append({"role": "assistant", "content": "⚠️ Ik heb nog geen documenten geladen. Vraag de beheerder om PDF's te uploaden."})
     else:
-        with st.spinner("OERbot is even aan het zoeken in de documenten... 📚"):
+        with st.spinner("Zoeken in documenten... 📚"):
+            # Zoek de 4 meest relevante stukjes tekst
             results = st.session_state.vector_store.similarity_search_with_score(query, k=4)
-            docs = [r[0] for r in results if r[1] < 0.6]
+            # Filter resultaten die te weinig lijken (score > 0.6 is vaak ruis in L2 distance)
+            docs = [r[0] for r in results] # We pakken ze gewoon allemaal, filtering kan te streng zijn
 
             if not docs:
-                response = "Ik kan je hier helaas alleen helpen met informatie uit de OER. Deze vraag staat niet in de OER, dus kan ik je hier niets over zeggen. Als klasgenoot zou ik je wel aanraden om dit even te bespreken met je coach of opleiding. 😊"
+                response = "Ik kan het antwoord helaas niet vinden in de geüploade documenten."
             else:
-                context_text = "\n\n".join([f"Bron [{d.metadata['source']}]: {d.page_content}" for d in docs])
+                context_text = "\n\n".join([f"Bron [{d.metadata['source']}, pagina {d.metadata['page']}]: {d.page_content}" for d in docs])
                 
                 system_prompt = f"""
-                Jij bent OERbot, een vriendelijke klasgenoot op het Dulon College.
+                Jij bent OERbot, een vriendelijke assistent.
                 
-                STRIKTE OPDRACHT:
-                - Je bent een afgesloten systeem. Je mag UITSLUITEND antwoorden geven op basis van de verstrekte OER-documenten.
-                - Als een vraag NIET over de OER gaat, weiger dan beleefd.
+                INSTRUCTIES:
+                - Gebruik ALLEEN de onderstaande context om antwoord te geven.
+                - Als het antwoord niet in de tekst staat, zeg dat dan eerlijk.
+                - Vermeld altijd de bron (Bestandsnaam + Pagina).
                 
-                STIJL:
-                - Varieer je begroetingen en gebruik B1-taal. 
-                - Vermeld ALTIJD de bron op een NIEUWE REGEL met 📖.
-                
-                CONTEXT: {context_text}
+                CONTEXT:
+                {context_text}
                 """
+                
                 chat_template = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", "{question}")])
                 formatted = chat_template.format_messages(question=query)
                 
@@ -159,8 +166,8 @@ def handle_query(query):
             
             st.session_state.messages.append({"role": "assistant", "content": response})
 
-# 8. Quick Actions
-st.markdown("#### Waar wil je meer over weten?")
+# --- 8. QUICK ACTIONS ---
+st.markdown("#### Veelgestelde vragen:")
 q_col1, q_col2 = st.columns(2, gap="small")
 with q_col1:
     if st.button("🔄 Herkansingen", use_container_width=True): handle_query("Hoe werkt een herkansing?"); st.rerun()
@@ -171,38 +178,65 @@ with q_col2:
 
 st.divider()
 
-# 9. Chat Geschiedenis
-bot_icon, user_icon = ("custom_bot_image.png" if os.path.exists("custom_bot_image.png") else "🤖"), ("user_logo.png" if os.path.exists("user_logo.png") else None)
+# --- 9. DISPLAY CHAT ---
 for message in st.session_state.messages:
-    with st.chat_message(message["role"], avatar=bot_icon if message["role"] == "assistant" else user_icon):
+    role = message["role"]
+    avatar = "🤖" if role == "assistant" else "👤"
+    with st.chat_message(role, avatar=avatar):
         st.markdown(message["content"])
 
-# 10. Chat Input
-if chat_input := st.chat_input("Stel je vraag aan OERbot..."):
-    handle_query(chat_input); st.rerun()
+if chat_input := st.chat_input("Typ hier je vraag..."):
+    handle_query(chat_input)
+    st.rerun()
 
-# 11. Zijbalk Admin
+# --- 10. ADMIN SIDEBAR (VERBETERD) ---
 with st.sidebar:
     if not st.session_state.logged_in:
-        st.title("Admin")
-        u, p = st.text_input("User"), st.text_input("Pass", type="password")
-        if st.button("Login"):
-            if u == admin_user and p == admin_pass: st.session_state.logged_in = True; st.rerun()
+        st.header("Admin Login")
+        u = st.text_input("Gebruikersnaam")
+        p = st.text_input("Wachtwoord", type="password")
+        if st.button("Inloggen"):
+            if u == admin_user and p == admin_pass: 
+                st.session_state.logged_in = True
+                st.rerun()
+            else:
+                st.error("Foute gegevens")
     else:
-        st.title("Beheer")
-        uploaded_files = st.file_uploader("Upload OER PDF's", type="pdf", accept_multiple_files=True)
-        if uploaded_files:
-            os.makedirs("uploads", exist_ok=True)
-            saved_paths = []
-            for uploaded_file in uploaded_files:
-                pdf_path = os.path.join("uploads", uploaded_file.name)
-                with open(pdf_path, "wb") as f: f.write(uploaded_file.getbuffer())
-                saved_paths.append(pdf_path)
-            
-            st.session_state.vector_store = initialize_vector_store(saved_paths)
-            st.success("Bestanden verwerkt!")
-        if st.button("Uitloggen"): st.session_state.logged_in = False; st.rerun()
+        st.header("📂 Document Beheer")
+        
+        # Laat zien wat er nu in de map staat
+        upload_dir = "uploads"
+        if not os.path.exists(upload_dir): os.makedirs(upload_dir)
+        files_on_disk = os.listdir(upload_dir)
+        
+        st.markdown(f"**Huidige bestanden ({len(files_on_disk)}):**")
+        if files_on_disk:
+            for f in files_on_disk:
+                st.caption(f"- {f}")
+        else:
+            st.caption("_Geen bestanden gevonden_")
 
-    st.sidebar.markdown("---")
-    if st.sidebar.button("Algemene Voorwaarden"): st.session_state.show_disclaimer = not st.session_state.show_disclaimer
-    if st.session_state.show_disclaimer: st.sidebar.info("Disclaimer: Aan antwoorden kunnen geen rechten worden ontleend.")
+        st.markdown("---")
+        uploaded_files = st.file_uploader("Nieuwe PDF's toevoegen", type="pdf", accept_multiple_files=True)
+        
+        if uploaded_files:
+            # 1. Bestanden opslaan
+            for uploaded_file in uploaded_files:
+                save_path = os.path.join(upload_dir, uploaded_file.name)
+                with open(save_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+            
+            # 2. ALLES opnieuw inlezen (oude + nieuwe)
+            all_paths = [os.path.join(upload_dir, f) for f in os.listdir(upload_dir) if f.endswith(".pdf")]
+            
+            with st.spinner("Database herbouwen..."):
+                # Forceer herladen door cache te clearen (optioneel, maar veilig)
+                initialize_vector_store.clear()
+                st.session_state.vector_store = initialize_vector_store(all_paths)
+                
+            st.success("✅ Database succesvol bijgewerkt!")
+            st.rerun()
+
+        if st.button("Uitloggen"):
+            st.session_state.logged_in = False
+            st.rerun()
