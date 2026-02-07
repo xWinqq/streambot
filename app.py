@@ -120,7 +120,7 @@ col1, col2, col3 = st.columns([1,3,1])
 with col2:
     if os.path.exists("logo.png"): st.image("logo.png", use_container_width=True)
     else: st.title("🤖 OERbot")
-st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw hulp voor vragen over de onderwijs- en examenreglementen op het Dulon College.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; opacity: 0.8; font-size: 0.9em;'>Jouw hulp voor vragen over het examenreglement op het Dulon College.</p>", unsafe_allow_html=True)
 
 # 7. Centrale Chat Logica (With Loading Feedback)
 def handle_query(query):
@@ -164,10 +164,10 @@ st.markdown("#### Waar wil je meer over weten?")
 q_col1, q_col2 = st.columns(2, gap="small")
 with q_col1:
     if st.button("🔄 Herkansingen", use_container_width=True): handle_query("Hoe werkt een herkansing?"); st.rerun()
-    if st.button("🤒 Ziek bij examen", use_container_width=True): handle_query("Wat als ik ziek ben voor een examen?"); st.rerun()
+    if st.button("🤝 vrijstellingen", use_container_width=True): handle_query("Wat zijn de regels rondom het krijgen van vrijstellingen?"); st.rerun()
 with q_col2:
     if st.button("🚫 Fraude regels", use_container_width=True): handle_query("Wat gebeurt er bij fraude?"); st.rerun()
-    if st.button("👨‍🏫 Persoonlijke hulp", use_container_width=True): handle_query("Wie helpt bij persoonlijke omstandigheden?"); st.rerun()
+    if st.button("⌚ Te laat komen", use_container_width=True): handle_query("Wat gebeurt er als ik te laat kom bij een examen?"); st.rerun()
 
 st.divider()
 
@@ -205,4 +205,4 @@ with st.sidebar:
 
     st.sidebar.markdown("---")
     if st.sidebar.button("Algemene Voorwaarden"): st.session_state.show_disclaimer = not st.session_state.show_disclaimer
-    if st.session_state.show_disclaimer: st.sidebar.info("Disclaimer: Aan antwoorden kunnen geen rechten worden ontleend.")
+    if st.session_state.show_disclaimer: st.sidebar.info("De antwoorden die de chatbot geeft zijn gegenereerd door AI. Het AI-model baseert zich op het examenreglement van COG, maar er kunnen fouten in de antwoorden zitten. Er kunnen daarom geen rechten worden verbonden aan de antwoorden van deze chatbot.")
